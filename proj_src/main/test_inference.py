@@ -7,31 +7,38 @@ os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer, LlamaForCausalLM
 
-model_paths = {
-    "llama-3.2-3b": "/scratch/eecs487w25_class_root/eecs487w25_class/shared_data/johnkimm_dir/models/llama-3.2-3b",
-    "zephyr-3b": "/scratch/eecs487w25_class_root/eecs487w25_class/shared_data/johnkimm_dir/models/stablelm-zephyr-3b",
-    "qwen2.5-3b": "/scratch/eecs487w25_class_root/eecs487w25_class/shared_data/johnkimm_dir/models/qwen2.5-3b"
-}
+model_list = [
+    # "meta-llama/Llama-3.1-8B-Instruct",
+    "stabilityai/stablelm-zephyr-3b",
+    "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+    "meta-llama/Llama-3.2-1B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    # "mistralai/Mistral-7B-Instruct-v0.3",
+    # "Qwen/Qwen2.5-7B-Instruct",
+    # "Qwen/Qwen2.5-Math-7B"
+]
 
 prompt = "I have 3 apples, and my dad has 2 more apples than me. How many apples do we have in total?"
 
-for model_name, model_path in model_paths.items():
+for model_name in model_list:
     print("=" * 50)
     print(f"Generating answers from: {model_name}")
     print("=" * 50)
     
     if "llama" in model_name.lower():
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            model_name,
             torch_dtype=torch.float16,  
             device_map="auto"           
         )
     else:
         # qwen2.5-3b
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
         model = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            model_name,
             torch_dtype=torch.float16,
             device_map="auto",
             trust_remote_code=True
@@ -44,9 +51,9 @@ for model_name, model_path in model_paths.items():
 
     outputs = model.generate(
         input_ids,
-        max_new_tokens=512,
-        num_beams=10,
-        num_return_sequences=10,
+        max_new_tokens=200,
+        num_beams=3,
+        num_return_sequences=3,
         early_stopping=True,
         pad_token_id=tokenizer.eos_token_id
     )

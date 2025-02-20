@@ -10,9 +10,9 @@ model_list = [
     # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
     # "meta-llama/Llama-3.2-1B-Instruct",
     # "meta-llama/Llama-3.2-3B-Instruct",
-    "Qwen/Qwen2.5-1.5B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "mistralai/Mistral-7B-Instruct-v0.3",
+    # "Qwen/Qwen2.5-1.5B-Instruct",
+    # "Qwen/Qwen2.5-3B-Instruct",
+    # "mistralai/Mistral-7B-Instruct-v0.3",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-Math-7B"
 ]

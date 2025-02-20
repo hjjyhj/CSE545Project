@@ -47,3 +47,11 @@ out = model.generate(in_tokens, max_new_tokens=50)
 output = tokenizer.batch_decode(out)
 print(output[0])
 ```
+
+#### Test
+Try to run the following script to check if everything works:
+```sh
+cd ./proj_src/main
+python test_inference.py
+```
+This should be able to use our cached models (without automatic downloading).

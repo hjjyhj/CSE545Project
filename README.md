@@ -55,3 +55,15 @@ cd ./proj_src/main
 python test_inference.py
 ```
 This should be able to use our cached models (without automatic downloading).
+
+### Directory Structure:
+- `proj_src/main`: entry point for running our pipeline.
+- `proj_src/scripts`: useful scripts (like model download).
+- `proj_src/init_eval`: evaluation of single models (before building our own pipeline).
+- `proj_src/pipeline`: main implementation of our pipeline.
+- `proj_src/utils`: some auxiliary scripts for running the pipeline.
+
+
+### TODO
+- Run initial evaluation of every single model on each benchmark (while seeking more possible models and benchmarks). Work in `proj_src/init_eval`.
+- Begin building the pipeline. Work in `proj_src/pipeline`.

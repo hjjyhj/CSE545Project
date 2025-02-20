@@ -9,12 +9,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer, Ll
 
 model_list = [
     # "meta-llama/Llama-3.1-8B-Instruct",
-    "stabilityai/stablelm-zephyr-3b",
-    "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+    # "stabilityai/stablelm-zephyr-3b",
+    # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
     "meta-llama/Llama-3.2-1B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "Qwen/Qwen2.5-1.5B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
+    # "meta-llama/Llama-3.2-3B-Instruct",
+    # "Qwen/Qwen2.5-1.5B-Instruct",
+    # "Qwen/Qwen2.5-3B-Instruct",
     # "mistralai/Mistral-7B-Instruct-v0.3",
     # "Qwen/Qwen2.5-7B-Instruct",
     # "Qwen/Qwen2.5-Math-7B"
@@ -51,9 +51,9 @@ for model_name in model_list:
 
     outputs = model.generate(
         input_ids,
-        max_new_tokens=200,
-        num_beams=3,
-        num_return_sequences=3,
+        max_new_tokens=50,
+        num_beams=2,
+        num_return_sequences=2,
         early_stopping=True,
         pad_token_id=tokenizer.eos_token_id
     )

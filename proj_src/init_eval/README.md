@@ -1,5 +1,6 @@
 # Init_Eval
 
+### Models & Benchmarks to test
 Before building our framework, first we need to evaluate every single model we want to incorporate, on each benchmark we aim to use.
 
 > Note: To pull llama models, you might have to require access on their huggingface page (e.g. https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct), and log in to your huggingface account using `huggingface-cli login` (`pip install huggingface-hub` to use this command)
@@ -25,3 +26,6 @@ Before building our framework, first we need to evaluate every single model we w
 - GSM8K (openai/gsm8k)
 - MATH (EleutherAI/hendrycks_math)
 ... (we might need to find more on reasoning tasks, as the GSI said they want to see results on more benchmarks lol)
+
+### Code
+We might use [lm_eval](https://github.com/EleutherAI/lm-evaluation-harness/tree/main) to do evaluation, which integrates most of the current benchmarks.

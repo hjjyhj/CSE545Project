@@ -6,7 +6,7 @@ Before building our framework, first we need to evaluate every single model we w
 
 
 **Small Models (~3B):**
-- Gemma-2-2B (google/gemma-2-2b-it)
+- <del>Gemma-2-2B (google/gemma-2-2b-it)</del>
 - Zephyr-3B (stabilityai/stablelm-zephyr-3b)
 - SmolLM2-1.7B (HuggingFaceTB/SmolLM2-1.7B-Instruct)
 - Llama-3.2-1B (meta-llama/Llama-3.2-1B-Instruct)
@@ -24,4 +24,4 @@ Before building our framework, first we need to evaluate every single model we w
 **Math Benchmarks**
 - GSM8K (openai/gsm8k)
 - MATH (EleutherAI/hendrycks_math)
-...
+... (we might need to find more on reasoning tasks, as the GSI said they want to see results on more benchmarks lol)

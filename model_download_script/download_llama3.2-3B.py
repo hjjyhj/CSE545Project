@@ -1,6 +1,5 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Define the save path
 SAVE_PATH = "/scratch/eecs487w25_class_root/eecs487w25_class/shared_data/johnkimm_dir/models/llama-3.2-3b"
 MODEL_NAME = "meta-llama/Llama-3.2-3B-Instruct"
 

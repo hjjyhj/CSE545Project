@@ -10,12 +10,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer, Ll
 
 model_list = [
     # "meta-llama/Llama-3.1-8B-Instruct",
-    "stabilityai/stablelm-zephyr-3b",
+    # "stabilityai/stablelm-zephyr-3b",
     # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
     # "meta-llama/Llama-3.2-1B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "Qwen/Qwen2.5-1.5B-Instruct",
-    # "Qwen/Qwen2.5-3B-Instruct",
+    # "meta-llama/Llama-3.2-3B-Instruct",
+    # "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
     # "mistralai/Mistral-7B-Instruct-v0.3",
     # "Qwen/Qwen2.5-7B-Instruct",
     # "Qwen/Qwen2.5-Math-7B"
@@ -58,6 +58,20 @@ for model_name in model_list:
         early_stopping=True,
         pad_token_id=tokenizer.pad_token_id
     )
+    
+    all_outputs = []
+    # Gather output
     for i, beam_output in enumerate(outputs, start=1):
-        answer = tokenizer.decode(beam_output, skip_special_tokens=True)
-        print(f"Beam {i}:\n{answer}\n")
+        answer = tokenizer.decode(beam_output, skip_special_tokens=True).strip()
+        output_entry = {
+            "model": model_name,
+            "beam": i,
+            "output": answer
+        }
+        all_outputs.append(output_entry)
+    # print for checking
+    for entry in all_outputs:
+        print("Model: ", entry["model"])
+        print("Beam: ", entry["beam"])
+        print("Output: ", entry["output"])
+        print("-" * 50)

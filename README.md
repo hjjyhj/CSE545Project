@@ -63,6 +63,8 @@ This should be able to use our cached models (without automatic downloading).
 - `proj_src/pipeline`: main implementation of our pipeline.
 - `proj_src/utils`: some auxiliary scripts for running the pipeline.
 
+### Benchmarks
+- GSM8K: https://huggingface.co/datasets/openai/gsm8k
 
 ### TODO
 - Run initial evaluation of every single model on each benchmark (while seeking more possible models and benchmarks). Work in `proj_src/init_eval`.

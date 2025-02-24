@@ -100,17 +100,32 @@ for entry in top_k:
     final_prompt += f"- {entry['output']}\n"
 
 final_prompt += """
-Please analyze the candidate answers above and output the most frequent final answer.
-If there is a tie, output any one of the tied answers.
-Your final answer should show the reasoning process. Make sure to only output one answer
+Please analyze the candidate answers above and determine the most frequent final answer. 
+Do not repeat the candidate answers or the question. 
+Based solely on the candidate answers, provide one concise final answer along with a detailed explanation of your reasoning.
+Please do not provide the candidate answers on the answer.
+Your final answer should be in the following format:
+
+Final Answer: <your answer>
+Reasoning: <detailed explanation>
 """
-# I'll use llama-3.1-8B model for now
-final_model_name = "meta-llama/Llama-3.1-8B-Instruct"
-final_tokenizer = AutoTokenizer.from_pretrained(final_model_name)
+
+# llama-3.1-8B model does not work well
+# final_model_name = "meta-llama/Llama-3.1-8B-Instruct"
+# final_tokenizer = AutoTokenizer.from_pretrained(final_model_name)
+# final_model = AutoModelForCausalLM.from_pretrained(
+#     final_model_name,
+#     torch_dtype=torch.float16,
+#     device_map="auto"
+# )
+
+final_model_name = "Qwen/Qwen2.5-7B-Instruct"
+final_tokenizer = AutoTokenizer.from_pretrained(final_model_name, trust_remote_code=True)
 final_model = AutoModelForCausalLM.from_pretrained(
     final_model_name,
     torch_dtype=torch.float16,
-    device_map="auto"
+    device_map="auto",
+    trust_remote_code=True
 )
 
 if final_tokenizer.pad_token_id is None:
@@ -126,8 +141,11 @@ final_output = final_model.generate(
     early_stopping=True,
     pad_token_id=final_tokenizer.pad_token_id
 )
-generated_tokens = final_output[0][final_input_ids.shape[-1]:]
-final_answer = final_tokenizer.decode(final_output[0], skip_special_tokens=True)
+
+# Take the input prompt out
+prompt_length = final_input_ids.shape[-1]
+generated_tokens = final_output[0][prompt_length:]
+final_answer = final_tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
 print("=" * 50)
 print("Final Answer from model:")

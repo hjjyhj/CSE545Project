@@ -14,6 +14,7 @@ Before building our framework, first we need to evaluate every single model we w
 - Llama-3.2-3B (meta-llama/Llama-3.2-3B-Instruct)
 - Qwen2.5-1.5B (Qwen/Qwen2.5-1.5B-Instruct)
 - Qwen2.5-3B (Qwen/Qwen2.5-3B-Instruct)
+- R1-Distill-Qwen-1.5B (deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B)
 
 **Medium Models (~7B)**
 - Llama-3.1-8B (meta-llama/Llama-3.1-8B-Instruct)
@@ -23,9 +24,8 @@ Before building our framework, first we need to evaluate every single model we w
 
 
 **Math Benchmarks**
-- GSM8K (openai/gsm8k)
-- MATH (EleutherAI/hendrycks_math)
-... (we might need to find more on reasoning tasks, as the GSI said they want to see results on more benchmarks lol)
-
-### Code
-We might use [lm_eval](https://github.com/EleutherAI/lm-evaluation-harness/tree/main) to do evaluation, which integrates most of the current benchmarks.
+> A list of candidate math benchmarks: https://github.com/huggingface/evaluation-guidebook/blob/main/contents/automated-benchmarks/some-evaluation-datasets.md 
+- GSM8K (openai/gsm8k) ([Reference evaluation code](https://github.com/Guangxuan-Xiao/GSM8K-eval))
+- MATH-500 (HuggingFaceH4/MATH-500) ([Reference evaluation code](https://github.com/openai/simple-evals/blob/main/math_eval.py))
+- AIME (di-zhang-fdu/AIME_1983_2024) ([Reference evaluation code](https://github.com/huggingface/open-r1/blob/main/src/open_r1/evaluate.py))
+- AGIEval (hails/agieval-sat-math) ([Reference evaluation code](https://github.com/ruixiangcui/AGIEval))

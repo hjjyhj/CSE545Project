@@ -51,14 +51,15 @@ while True:
                 model_name,
                 torch_dtype=torch.float16,
                 device_map="auto",
-                trust_remote_code=True
+                # trust_remote_code=True
             )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
-                device_map="auto"
+                device_map="auto",
+                trust_remote_code=True
             )
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -134,7 +135,7 @@ Candidate Answers:
     final_input_ids = final_tokenizer(judge_prompt, return_tensors="pt").input_ids.to(final_model.device)
     final_output = final_model.generate(
         final_input_ids,
-        max_new_tokens=1024,
+        max_new_tokens=2048,
         num_beams=10,
         early_stopping=True,
         pad_token_id=final_tokenizer.pad_token_id

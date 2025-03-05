@@ -2,26 +2,21 @@
 
 #SBATCH --account=eecs545w25_class
 
-# TODO: Change this if needed
-#SBATCH --time=8:00:00
+#SBATCH --time=2:00:00
 
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
 
-#SBATCH --mem=50g
+#SBATCH --mem=32g
 
-# TODO: change these
-#SBATCH --job-name=example_job
-#SBATCH --output=example_output.out
+#SBATCH --job-name=consensus_reasoning
+#SBATCH --output=consensus_reasoning_%j.out
 
-# TODO: change this
-#SBATCH --mail-user=UNIQNAME@umich.edu
+#SBATCH --mail-user=YOUR_UNIQNAME@umich.edu
+#SBATCH --mail-type=BEGIN,END,FAIL
 
-#SBATCH --mail-type=BEGIN,END
+module load python3.11-anaconda/2023.09
+source activate ece545
 
-# module load python3.11-anaconda/20ss24.02
-conda activate ece545
-
-# TODO: change this
-python train.py --project_name TODO_CHANGE_THIS --model_name TODO_CHANGE_THIS \
-    --run_name TODO_CHANGE_THIS --reward_type TODO_CHANGE_THIS
+# run main.py
+python proj_src/main/main.py

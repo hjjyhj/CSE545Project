@@ -32,7 +32,7 @@ import os
 os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
 ```
 
-After there steps, you could use our downloaded models, by directly specifying the model name in your code like:
+After these steps, you could use our downloaded models, by directly specifying the model name in your code like:
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer

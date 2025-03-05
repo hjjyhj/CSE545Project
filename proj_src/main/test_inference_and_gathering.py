@@ -52,10 +52,13 @@ for model_name in model_list:
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    tokenized_input = tokenizer(prompt, return_tensors="pt", padding=True)
+    input_ids = tokenized_input.input_ids.to(model.device)
+    attention_mask = tokenized_input.attention_mask.to(model.device)
 
     outputs = model.generate(
         input_ids,
+        attention_mask=attention_mask,
         max_new_tokens=512,
         num_beams=5,
         num_return_sequences=5,
@@ -131,11 +134,14 @@ final_model = AutoModelForCausalLM.from_pretrained(
 if final_tokenizer.pad_token_id is None:
     final_tokenizer.pad_token_id = final_tokenizer.eos_token_id
 
-final_input_ids = final_tokenizer(final_prompt, return_tensors="pt").input_ids.to(final_model.device)
+tokenized_final_input = final_tokenizer(final_prompt, return_tensors="pt", padding=True)
+final_input_ids = tokenized_final_input.input_ids.to(final_model.device)
+final_attention_mask = tokenized_final_input.attention_mask.to(final_model.device)
 
 # Maybe it's a good idea to explore more, using higher number for `num_beams`
 final_output = final_model.generate(
     final_input_ids,
+    attention_mask=final_attention_mask,
     max_new_tokens=1024,
     num_beams=10,
     early_stopping=True,

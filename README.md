@@ -15,6 +15,10 @@ conda activate ece545
 pip install -e .
 ```
 
+For evaluation, please additionally install some other dependencies:
+```sh
+pip install "git+https://github.com/tongyx361/symeval.git"
+```
 
 #### Use our Shared Models & Datasets
 To use our shared models and datasets by default, first set the environment variable `HF_HOME` in `~/.bashrc`:

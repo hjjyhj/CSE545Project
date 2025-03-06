@@ -1,3 +1,7 @@
+*_wln*
+*.out
+output/
+
 # .sh scripts
 *.sh
 *.sh.*

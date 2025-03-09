@@ -296,7 +296,6 @@ def generate(model, tokenizer, input_text, generate_kwargs):
         return response
     return response[0]
 
-
 def main():
     args = parse_args()
 
@@ -315,11 +314,11 @@ def main():
     list_data_dict = load_jsonl(test_filepath, instruction="question", output="answer")
 
     model_list = [
-        # "stabilityai/stablelm-zephyr-3b",
-        # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
-        # "meta-llama/Llama-3.2-1B-Instruct",
-        # "meta-llama/Llama-3.2-3B-Instruct",
-        # "Qwen/Qwen2.5-1.5B-Instruct",
+        "stabilityai/stablelm-zephyr-3b",
+        "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+        "meta-llama/Llama-3.2-1B-Instruct",
+        "meta-llama/Llama-3.2-3B-Instruct",
+        "Qwen/Qwen2.5-1.5B-Instruct",
         "Qwen/Qwen2.5-3B-Instruct",
         "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
         # "mistralai/Mistral-7B-Instruct-v0.3",

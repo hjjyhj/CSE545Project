@@ -10,10 +10,10 @@ from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
 )
-import pandas as pd
 
 from utils import download_url, load_jsonl
 import argparse
+import pandas as pd
 
 transformers.logging.set_verbosity(40)
 
@@ -37,7 +37,8 @@ def extract_answer_from_output(completion):
 
 
 def is_correct(model_answer, answer):
-    gt_answer = extract_answer_from_output(answer)
+    # gt_answer = extract_answer_from_output(answer)
+    gt_answer = answer
     assert gt_answer != INVALID_ANS
     return model_answer == gt_answer
 
@@ -302,12 +303,18 @@ def main():
 
     seed_everything(args.seed)
 
-    test_filepath = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/data/AIME_Dataset_1983_2024.csv"
+    test_filepath = os.path.join(args.data_root, "AIME_Dataset_1983_2024.csv") 
     if not os.path.exists(test_filepath):
-        assert False
+        download_url(
+            "https://huggingface.co/datasets/di-zhang-fdu/AIME_1983_2024/resolve/main/AIME_Dataset_1983_2024.csv?download=true",
+            args.data_root,
+        )
+        # os.rename(os.path.join(args.data_root, "test.jsonl"), test_filepath)
 
+ 
+    # list_data_dict = load_jsonl(test_filepath, instruction="question", output="answer")
     list_data_dict = pd.read_csv(test_filepath)
-    list_data_dict.rename(columns={"Question":"instruction", "Answer":"output"})
+    list_data_dict.rename(columns={"Question": "instruction", "Answer": "output"})
 
     model_list = [
         # "stabilityai/stablelm-zephyr-3b",
@@ -339,9 +346,14 @@ def main():
 
         print(f"Begin evaluating model {full_model_name}")
         answers = []
-        for sample in tqdm(list_data_dict):
+        # for sample in tqdm(list_data_dict):
+        for row in list_data_dict.itertuples(index=True, name='Row'):
+            sample = {
+                "instruction": row.Question,
+                "output": row.Answer
+            }
             input_text = build_prompt(sample["instruction"], N_SHOT, COT_FLAG)
-            generate_kwargs = dict(max_new_tokens=256, top_p=0.95, temperature=0.8)
+            generate_kwargs = dict(max_new_tokens=1024, top_p=0.95, temperature=0.8)
             model_completion = generate(model, tokenizer, input_text, generate_kwargs)
             model_answer = clean_answer(model_completion)
             is_cor = is_correct(model_answer, sample["output"])
@@ -350,7 +362,7 @@ def main():
                 print(f"Full input_text:\n{input_text}\n\n")
             print(
                 f'Question: {sample["instruction"]}\n\n'
-                f'Answers: {extract_answer_from_output(sample["output"])}\n\n'
+                f'Answers: {sample["output"]}\n\n'
                 f"Model Answers: {model_answer}\n\n"
                 f"Model Completion: {model_completion}\n\n"
                 f"Is correct: {is_cor}\n\n"

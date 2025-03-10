@@ -345,7 +345,7 @@ def main():
         answers = []
         for sample in tqdm(list_data_dict):
             input_text = build_prompt(sample["instruction"], N_SHOT, COT_FLAG)
-            generate_kwargs = dict(max_new_tokens=256, top_p=0.95, temperature=0.8)
+            generate_kwargs = dict(max_new_tokens=1024, top_p=0.95, temperature=0.8)
             model_completion = generate(model, tokenizer, input_text, generate_kwargs)
             model_answer = clean_answer(model_completion)
             is_cor = is_correct(model_answer, sample["output"])

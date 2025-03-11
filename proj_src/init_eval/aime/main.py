@@ -1,219 +1,66 @@
 import os
 os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
 
-import torch
+import argparse
 import re
-import random
-import transformers
+import pandas as pd
+from symeval import EvaluatorMathBatch
+
+from datasets import load_dataset
 from tqdm import tqdm
+import torch
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
 )
 
 from utils import download_url, load_jsonl
-import argparse
-import pandas as pd
 
-transformers.logging.set_verbosity(40)
+# Define the prompt template
+INSTRUCTION_TEMPLATE = """
+Solve the following math problem step by step. The last line of your response should be of the form: 'Answer: $ANSWER' (without quotes), where $ANSWER is the answer to the problem.
+The correct final answer is guaranteed to be an integer. Your answer should not have any units, just the number. Like: 'Answer: 3'.
+Remember to put your final answer on its own line after "Answer: ", and you DO NOT need to use a \\boxed command. The final answer should be as brief as possible.
+"""
 
-ANS_RE = re.compile(r"#### (\-?[0-9\.\,]+)")
-INVALID_ANS = "[invalid]"
+# max: 3
+few_shot_examples = [
+    "Question:\n Betty is saving money for a new wallet which costs $100. Betty has only half of the money she needs. Her parents decided to give her $15 for that purpose, and her grandparents twice as much as her parents. How much more money does Betty need to buy the wallet?\n\nResponse:\n In the beginning, Betty has only 100 / 2 = 50. Betty's grandparents gave her 15 * 2 = 30. This means, Betty needs 100 - 50 - 30 - 15 = 5 more.\nAnswer: 5",
+    "Question:\n Lisa, Jack, and Tommy earned $60 from washing cars all week. However, half of the $60 was earned by Lisa. Tommy earned half of what Lisa earned. How much more money did Lisa earn than Tommy?\n\nResponse:\n Lisa earned 60 * 1/2 = 30. Tommy earned 30 * 1/2 = 15. Lisa earned 30 - 15 = 15 more than Tommy.\nAnswer: 15",
+    "Question:\n Gretchen has 110 coins. There are 30 more gold coins than silver coins. How many gold coins does Gretchen have?\n\nResponse\n: Let x be the number of silver coins Gretchen has Gretchen has x+30 gold coins. x+x+30=110 2*x=80 x=<<40=40>>40 Gretchen has 40+30=70 gold coins\nAnswer: 70."
+]
 
-N_SHOT = 3
-COT_FLAG = True
-DEBUG = False
-ANSWER_TRIGGER = "The answer is"
+def format_prompt(question, num_shots):
+    if num_shots == 0:
+        return INSTRUCTION_TEMPLATE + "\nQuestion:\n" + question + '\n\nResponse:\n'
+    prompt = INSTRUCTION_TEMPLATE + '\nExamples:\n'
+    for example in few_shot_examples:
+        prompt += (example + '\n')
+    return prompt + "\nQuestion:\n" + question + '\n\nResponse:\n'
 
-
-def extract_answer_from_output(completion):
-    match = ANS_RE.search(completion)
+def extract_answer_from_response(response):
+    """
+    Extracts the answer from the model's response.
+    Assumes the answer follows the 'Answer:' keyword.
+    """
+    match = re.search(r'Answer:\s*(.*)', response)
     if match:
-        match_str = match.group(1).strip()
-        match_str = match_str.replace(",", "")
-        return match_str
-    else:
-        return INVALID_ANS
+        return match.group(1).strip()
+    return None
 
-
-def is_correct(model_answer, answer):
-    # gt_answer = extract_answer_from_output(answer)
-    gt_answer = answer
-    assert gt_answer != INVALID_ANS
-    return model_answer == gt_answer
-
-
-def create_demo_text(n_shot=8, cot_flag=True):
-    question, chain, answer = [], [], []
-    question.append(
-        "There are 15 trees in the grove. "
-        "Grove workers will plant trees in the grove today. "
-        "After they are done, there will be 21 trees. "
-        "How many trees did the grove workers plant today?"
-    )
-    chain.append(
-        "There are 15 trees originally. "
-        "Then there were 21 trees after some more were planted. "
-        "So there must have been 21 - 15 = 6."
-    )
-    answer.append("6")
-
-    question.append(
-        "If there are 3 cars in the parking lot and 2 more cars arrive, "
-        "how many cars are in the parking lot?"
-    )
-    chain.append("There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5.")
-    answer.append("5")
-
-    question.append(
-        "Leah had 32 chocolates and her sister had 42. If they ate 35, "
-        "how many pieces do they have left in total?"
-    )
-    chain.append(
-        "Originally, Leah had 32 chocolates. "
-        "Her sister had 42. So in total they had 32 + 42 = 74. "
-        "After eating 35, they had 74 - 35 = 39."
-    )
-    answer.append("39")
-
-    question.append(
-        "Jason had 20 lollipops. He gave Denny some lollipops. Now Jason "
-        "has 12 lollipops. How many lollipops did Jason give to Denny?"
-    )
-    chain.append(
-        "Jason started with 20 lollipops. Then he had 12 after giving some "
-        "to Denny. So he gave Denny 20 - 12 = 8."
-    )
-    answer.append("8")
-
-    question.append(
-        "Shawn has five toys. For Christmas, he got two toys each from his "
-        "mom and dad. How many toys does he have now?"
-    )
-    chain.append(
-        "Shawn started with 5 toys. If he got 2 toys each from his mom and "
-        "dad, then that is 4 more toys. 5 + 4 = 9."
-    )
-    answer.append("9")
-
-    question.append(
-        "There were nine computers in the server room. Five more computers "
-        "were installed each day, from monday to thursday. "
-        "How many computers are now in the server room?"
-    )
-    chain.append(
-        "There were originally 9 computers. For each of 4 days, 5 more "
-        "computers were added. So 5 * 4 = 20 computers were added. "
-        "9 + 20 is 29."
-    )
-    answer.append("29")
-
-    question.append(
-        "Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On "
-        "wednesday, he lost 2 more. "
-        "How many golf balls did he have at the end of wednesday?"
-    )
-    chain.append(
-        "Michael started with 58 golf balls. After losing 23 on tuesday, "
-        "he had 58 - 23 = 35. After losing 2 more, "
-        "he had 35 - 2 = 33 golf balls."
-    )
-    answer.append("33")
-
-    question.append(
-        "Olivia has $23. She bought five bagels for $3 each. "
-        "How much money does she have left?"
-    )
-    chain.append(
-        "Olivia had 23 dollars. "
-        "5 bagels for 3 dollars each will be 5 x 3 = 15 dollars. "
-        "So she has 23 - 15 dollars left. 23 - 15 is 8."
-    )
-    answer.append("8")
-
-    # randomize order of the examples ...
-    index_list = list(range(len(question)))
-    random.shuffle(index_list)
-
-    # Concatenate demonstration examples ...
-    demo_text = ""
-    for i in index_list[:n_shot]:
-        if cot_flag:
-            demo_text += (
-                "Q: "
-                + question[i]
-                + "\nA: "
-                + chain[i]
-                + " "
-                + ANSWER_TRIGGER
-                + " "
-                + answer[i]
-                + ".\n\n"
-            )
-        else:
-            demo_text += (
-                "Question: "
-                + question[i]
-                + "\nAnswer: "
-                + ANSWER_TRIGGER
-                + " "
-                + answer[i]
-                + ".\n\n"
-            )
-    return demo_text
-
-
-def build_prompt(input_text, n_shot, cot_flag):
-    demo = create_demo_text(n_shot, cot_flag)
-    input_text_prompt = demo + "Q: " + input_text + "\n" + "A:"
-    return input_text_prompt
-
-
-def clean_answer(model_pred):
-    model_pred = model_pred.lower()
-    preds = model_pred.split(ANSWER_TRIGGER.lower())
-    answer_flag = True if len(preds) > 1 else False
-    if answer_flag:
-        # Pick first answer with flag
-        pred = preds[1]
-    else:
-        # Pick last number without flag
-        pred = preds[-1]
-
-    pred = pred.replace(",", "")
-    pred = [s for s in re.findall(r"-?\d+\.?\d*", pred)]
-
-    if len(pred) == 0:
-        return INVALID_ANS
-
-    if answer_flag:
-        # choose the first element in list
-        pred = pred[0]
-    else:
-        # choose the last element in list
-        pred = pred[-1]
-
-    # (For arithmetic tasks) if a word ends with period, it will be omitted ...
-    if pred[-1] == ".":
-        pred = pred[:-1]
-
-    return pred
-
-
-def seed_everything(seed: int):
-    import random
-    import os
-    import numpy as np
-    import torch
-
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = True
-
+def math_equal(model_answer, true_answer, evaluator):
+    """
+    Compares two mathematical expressions for equivalence.
+    """
+    # print(f"[Model answer]: {model_answer}")
+    # print(f"[True answer]: {true_answer}")
+    if model_answer is None or true_answer is None:
+        return False
+    try:
+        return evaluator.eq(model_answer, true_answer)
+    except Exception as e:
+        print(e)
+        return model_answer == true_answer
 
 def load(model_name_or_path):
     print(f"Loading model from {model_name_or_path} ...")
@@ -237,72 +84,111 @@ def load(model_name_or_path):
 
     return model, tokenizer
 
+def evaluate_model_on_aime(model, tokenizer, dataset, evaluator, num_shots, generate_kwargs, f):
+    """
+    Evaluates the given model on the aime dataset.
+    """
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_name_or_path",
-        type=str,
-        default="/dataset/llama2/llama-2-7b-hf",
-        help="The model checkpoint for weights initialization.",
-    )
-    parser.add_argument(
-        "--data_root",
-        type=str,
-        default="/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/data",
-        help="The root folder of the data.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="./output",
-        help="The output directory where the model predictions and checkpoints will be written.",
-    )
+    cur_count = 0
+    correct_count = 0
+    total_count = len(dataset)
+    print(f'=== Total: {total_count} ===')
 
-    parser.add_argument("--load", type=str, default=None, help="load quantized model")
+    for row in tqdm(dataset.itertuples(index=True, name='Row')):
+        sample = {
+            "instruction": row.Question,
+            "output": row.Answer
+        }
 
-    args = parser.parse_args()
-    return args
+        question = sample['instruction']
+        true_answer = sample['output']
 
+        # Generate the model's response
+        prompt = format_prompt(question, num_shots)
 
-def generate(model, tokenizer, input_text, generate_kwargs):
-    input_text = tokenizer(
-        input_text,
-        padding=False,
-        add_special_tokens=True,
-        return_tensors="pt",
-    )
-    input_ids = input_text.input_ids.cuda()
-    attention_mask = input_text.attention_mask.cuda()
+        input_text = tokenizer(
+            prompt,
+            padding=False,
+            add_special_tokens=True,
+            return_tensors="pt",
+        )
+        input_ids = input_text.input_ids.cuda()
+        attention_mask = input_text.attention_mask.cuda()
 
-    output_ids = model.generate(
-        input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs
-    )
-    response = []
-    for i in range(output_ids.shape[0]):
-        response.append(
-            tokenizer.decode(
-                output_ids[i][input_ids.shape[1] :],
-                skip_special_tokens=True,
-                ignore_tokenization_space=True,
-            )
+        output_ids = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs
         )
 
-    if len(response) > 1:
-        return response
-    return response[0]
+        response = []
+        for i in range(output_ids.shape[0]):
+            response.append(
+                tokenizer.decode(
+                    output_ids[i][input_ids.shape[1] :],
+                    skip_special_tokens=True,
+                    ignore_tokenization_space=True,
+                )
+            )
 
-def main():
-    args = parse_args()
+        if not len(response) > 1:
+            response = response[0]
 
-    seed_everything(args.seed)
+        # Extract the model's answer
+        model_answer = extract_answer_from_response(response)
 
+        # Compare the model's answer to the true answer
+        correct = False
+        if model_answer and math_equal(model_answer, true_answer, evaluator):
+            correct = True
+            correct_count += 1
+        cur_count += 1
+
+        summary_str = (
+            '=' * 50 + '\n\n' + \
+            '### Question:\n' + question + '\n\n' + \
+            '### Model Response:\n' + response + '\n\n' + \
+            f'### [MODEL_ANSWER]: {model_answer}\n' + \
+            f'### [TRUE_ANSWER]: {true_answer}\n\n' + \
+            f'%%%%% IS_CORRECT: {str(correct)} %%%%%\n\n' + \
+            f'%%%%% Acc for now: {correct_count/cur_count} %%%%%\n\n'
+        )
+
+        print(summary_str)
+
+        f.write(summary_str)
+
+    accuracy = correct_count / total_count
+    return accuracy
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_name', default='deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B')
+    parser.add_argument("--run_all_models", action='store_true', help='run all models in the list')
+    parser.add_argument("--max_new_tokens", type=int, default=512)
+    parser.add_argument('--num_shots', type=int, choices=[0, 3], default=0)
+    parser.add_argument('--data_root', default="/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/data")
+    parser.add_argument('--output_dir', default='./output')
+    
+    args = parser.parse_args()
+
+
+    model_list = [
+        "stabilityai/stablelm-zephyr-3b",
+        "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+        "meta-llama/Llama-3.2-1B-Instruct",
+        "meta-llama/Llama-3.2-3B-Instruct",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "Qwen/Qwen2.5-3B-Instruct",
+        "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+        # "mistralai/Mistral-7B-Instruct-v0.3",
+        # "Qwen/Qwen2.5-7B-Instruct",
+        # "meta-llama/Llama-3.1-8B-Instruct",
+        # "Qwen/Qwen2.5-Math-7B",
+    ]   
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Load the aime dataset
     test_filepath = os.path.join(args.data_root, "AIME_Dataset_1983_2024.csv") 
     if not os.path.exists(test_filepath):
         download_url(
@@ -311,81 +197,44 @@ def main():
         )
         # os.rename(os.path.join(args.data_root, "test.jsonl"), test_filepath)
 
- 
-    # list_data_dict = load_jsonl(test_filepath, instruction="question", output="answer")
     list_data_dict = pd.read_csv(test_filepath)
     list_data_dict.rename(columns={"Question": "instruction", "Answer": "output"})
+    dataset = list_data_dict
 
-    model_list = [
-        # "stabilityai/stablelm-zephyr-3b",
-        # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
-        # "meta-llama/Llama-3.2-1B-Instruct",
-        # "meta-llama/Llama-3.2-3B-Instruct",
-        # "Qwen/Qwen2.5-1.5B-Instruct",
-        # "Qwen/Qwen2.5-3B-Instruct",
-        "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-        # "mistralai/Mistral-7B-Instruct-v0.3",
-        # "Qwen/Qwen2.5-7B-Instruct",
-        # "meta-llama/Llama-3.1-8B-Instruct",
-        # "Qwen/Qwen2.5-Math-7B",
-    ]
+    # math expression evaluator
+    evaluator = EvaluatorMathBatch()
 
-    for full_model_name in model_list:
-        print(f"Loading model {full_model_name}")
+    generate_kwargs = dict(max_new_tokens=args.max_new_tokens, top_p=0.95, temperature=0.8)
 
+    if args.run_all_models:
+        for full_model_name in model_list:
+            save_name = os.path.join(args.output_dir, full_model_name.split('/')[-1])
+            os.makedirs(save_name, exist_ok=True)
+            model, tokenizer = load(full_model_name)
+            print(f'Evaluating on {full_model_name}')
+
+            with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
+                acc = evaluate_model_on_aime(model, tokenizer, dataset, evaluator, args.num_shots, generate_kwargs, f)
+            
+            print(f'Acc: {acc}')
+            with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
+                f.write(f"Acc: {acc}\n")
+
+    else:
+        full_model_name = args.model_name
+        save_name = os.path.join(args.output_dir, full_model_name.split('/')[-1])
+        os.makedirs(save_name, exist_ok=True)
         model, tokenizer = load(full_model_name)
+        print(f'Evaluating on {full_model_name}')
 
-        save_path = os.path.join(args.output_dir, full_model_name.split('/')[-1])
-        os.makedirs(save_path, exist_ok=True)
-
-        # if args.load:
-        #     print("loading...", args.load)
-        #     model_state = torch.load(args.load, map_location="cpu")
-        #     model.load_state_dict(model_state, strict=False)
-        #     model.half().cuda()
-
-        print(f"Begin evaluating model {full_model_name}")
-        answers = []
-        # for sample in tqdm(list_data_dict):
-        for row in list_data_dict.itertuples(index=True, name='Row'):
-            sample = {
-                "instruction": row.Question,
-                "output": row.Answer
-            }
-            input_text = build_prompt(sample["instruction"], N_SHOT, COT_FLAG)
-            generate_kwargs = dict(max_new_tokens=1024, top_p=0.95, temperature=0.8)
-            model_completion = generate(model, tokenizer, input_text, generate_kwargs)
-            model_answer = clean_answer(model_completion)
-            is_cor = is_correct(model_answer, sample["output"])
-            answers.append(is_cor)
-            if DEBUG:
-                print(f"Full input_text:\n{input_text}\n\n")
-            print(
-                f'Question: {sample["instruction"]}\n\n'
-                f'Answers: {sample["output"]}\n\n'
-                f"Model Answers: {model_answer}\n\n"
-                f"Model Completion: {model_completion}\n\n"
-                f"Is correct: {is_cor}\n\n"
-            )
-
-            print(
-                f"Num of total question: {len(answers)}, "
-                f"Correct num: {sum(answers)}, "
-                f"Accuracy: {float(sum(answers))/len(answers)}."
-            )
-
-        with open(os.path.join(save_path, "results.txt"), "w") as f:
-            for answer in answers:
-                print(answer, file=f)
-
-        with open(os.path.join(save_path, "scores.txt"), "w") as f:
-            print(
-                f"Num of total question: {len(answers)}, "
-                f"Correct num: {sum(answers)}, "
-                f"Accuracy: {float(sum(answers))/len(answers)}.",
-                file=f,
-            )
+        with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
+            acc = evaluate_model_on_aime(model, tokenizer, dataset, evaluator, args.num_shots, generate_kwargs, f)
+        
+        print(f'Acc: {acc}')
+        with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
+            f.write(f"Acc: {acc}\n")
 
 
-if __name__ == "__main__":
-    main()
+        
+
+

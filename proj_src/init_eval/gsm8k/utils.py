@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 import ssl
 import urllib.request
 
@@ -37,12 +38,22 @@ def download_url(url: str, folder="folder"):
 
     return path
 
+def extract_answer_from_data(output):
+    """
+    Extracts the answer from the data's reference output.
+    Assumes the answer follows the '#### ' keyword.
+    """
+    match = re.search(r'#### \s*(.*)', output)
+    if match:
+        return match.group(1).strip()
+    return None
 
 def load_jsonl(
     file_path,
     instruction="instruction",
     input="input",
     output="output",
+    gt_answer='gt_answer',
     category="category",
     is_gzip=False,
 ):
@@ -57,6 +68,7 @@ def load_jsonl(
                 instruction=item[instruction] if instruction in item else None,
                 input=item[input] if input in item else None,
                 output=item[output] if output in item else None,
+                gt_answer=extract_answer_from_data(item[output]) if output in item else None,
                 category=item[category] if category in item else None,
             )
             item = new_item

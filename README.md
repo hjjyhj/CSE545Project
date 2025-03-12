@@ -82,6 +82,8 @@ Before building our framework, first we need to evaluate every single model we w
 - Qwen2.5-1.5B (Qwen/Qwen2.5-1.5B-Instruct)
 - Qwen2.5-3B (Qwen/Qwen2.5-3B-Instruct)
 - R1-Distill-Qwen-1.5B (deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B)
+- Gemma-3-1b (google/gemma-3-1b-it)
+- Gemma-3-4b (google/gemma-3-4b-it)
 
 **Medium Models (~7B)**
 - Llama-3.1-8B (meta-llama/Llama-3.1-8B-Instruct)

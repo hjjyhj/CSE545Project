@@ -68,12 +68,21 @@ def load(model_name_or_path):
         model_name_or_path,
         trust_remote_code=True,
     )
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        device_map="auto",
-        torch_dtype=torch.float16,
-        trust_remote_code=True,
-    )
+    if "gemma-3" in model_name_or_path.lower():
+        from transformers import Gemma3ForCausalLM
+        model = Gemma3ForCausalLM.from_pretrained(
+            model_name_or_path,
+            # device_map="auto",
+            torch_dtype=torch.bfloat16,
+            # trust_remote_code=True,
+        ).cuda().eval()
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is not None:
             tokenizer.pad_token_id = tokenizer.eos_token_id

@@ -15,10 +15,28 @@ conda activate ece545
 pip install -e .
 ```
 
-For evaluation, please additionally install some other dependencies:
-```sh
-pip install "git+https://github.com/tongyx361/symeval.git"
-```
+##### Additional requirements (for specific usage)
+- For evaluation on GSM8k, AIME, MATH-500, please additionally install some other dependencies:
+  ```sh
+  pip install "git+https://github.com/tongyx361/symeval.git"
+  ```
+
+- If you want to run the new Gemma-3 models, please re-install the nighty version of transformers:
+  ```sh
+  pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
+  ```
+  And load the model like:
+  ```python
+  from transformers import Gemma3ForCausalLM
+  model = Gemma3ForCausalLM.from_pretrained(
+      model_name_or_path,
+      # device_map="auto",
+      torch_dtype=torch.bfloat16,
+      # trust_remote_code=True,
+  ).cuda().eval()
+  ```
+
+
 
 #### Use our Shared Models & Datasets
 To use our shared models and datasets by default, first set the environment variable `HF_HOME` in `~/.bashrc`:
@@ -82,6 +100,8 @@ Before building our framework, first we need to evaluate every single model we w
 - Qwen2.5-1.5B (Qwen/Qwen2.5-1.5B-Instruct)
 - Qwen2.5-3B (Qwen/Qwen2.5-3B-Instruct)
 - R1-Distill-Qwen-1.5B (deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B)
+- Gemma-3-1b (google/gemma-3-1b-it)
+- Gemma-3-4b (google/gemma-3-4b-it)
 
 **Medium Models (~7B)**
 - Llama-3.1-8B (meta-llama/Llama-3.1-8B-Instruct)

@@ -15,7 +15,7 @@
 #SBATCH --mail-user=YOUR_UNIQNAME@umich.edu
 #SBATCH --mail-type=BEGIN,END,FAIL
 
-module load python3.11-anaconda/2023.09
+# module load python3.11-anaconda/2023.09
 source activate ece545
 
 # run main.py

@@ -3,6 +3,7 @@ os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_
 
 import argparse
 import re
+import json
 from symeval import EvaluatorMathBatch
 
 from datasets import load_dataset
@@ -13,7 +14,7 @@ from transformers import (
     AutoModelForCausalLM,
 )
 
-from utils import download_url, load_jsonl
+from utils import download_url, load_jsonl, record_wrong_responses
 
 # Define the prompt template
 INSTRUCTION_TEMPLATE = """
@@ -93,14 +94,17 @@ def load(model_name_or_path):
 
     return model, tokenizer
 
-def evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, num_shots, generate_kwargs, f):
+def evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, num_shots, generate_kwargs, record_wrong, f):
     """
     Evaluates the given model on the gsm8k dataset.
     """
 
     cur_count = 0
     correct_count = 0
+    trunc_wrong_count = 0
     total_count = len(dataset)
+
+    wrong_responses = []
 
     for sample in tqdm(dataset):
         question = sample['instruction']
@@ -143,6 +147,21 @@ def evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, num_shots, gen
         if model_answer and math_equal(model_answer, true_answer, evaluator):
             correct = True
             correct_count += 1
+        else:
+            if not model_answer: # wrong because the model didn't output a formatted answer, most likely to be truncated
+                trunc_wrong_count += 1
+
+            if record_wrong:
+                wrong_response = {
+                    "idx": str(cur_count),
+                    "question": question,
+                    "answer": sample["output"],
+                    "model_response": response,
+                    "gt_answer": str(true_answer),
+                    "model_answer": str(model_answer)
+                }
+                wrong_responses.append(wrong_response)
+
         cur_count += 1
 
         summary_str = (
@@ -160,15 +179,28 @@ def evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, num_shots, gen
         f.write(summary_str)
 
     accuracy = correct_count / total_count
-    return accuracy
+
+    trunc_wrong_ratio = trunc_wrong_count / (total_count - correct_count)
+
+    results = {
+        "total": total_count,
+        "correct": correct_count,
+        "trunc_wrong": trunc_wrong_count,
+        "trunc_wrong_ratio": trunc_wrong_ratio,
+        "accuracy": accuracy,
+        "wrong_responses": wrong_responses
+    }
+
+    return results
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', default='deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B')
     parser.add_argument("--run_all_models", action='store_true', help='run all models in the list')
-    parser.add_argument("--max_new_tokens", type=int, default=512)
+    parser.add_argument("--max_new_tokens", type=int, default=1024)
     parser.add_argument('--num_shots', type=int, choices=[0, 3], default=0)
+    parser.add_argument('--record_wrong', action='store_true', help='record the answers that are wrong')
     parser.add_argument('--data_root', default="/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/data")
     parser.add_argument('--output_dir', default='./output')
     
@@ -207,7 +239,8 @@ if __name__ == '__main__':
     # math expression evaluator
     evaluator = EvaluatorMathBatch()
 
-    generate_kwargs = dict(max_new_tokens=args.max_new_tokens, top_p=0.95, temperature=0.8)
+    # generate_kwargs = dict(max_new_tokens=args.max_new_tokens, top_p=0.95, temperature=0.8)
+    generate_kwargs = dict(max_new_tokens=args.max_new_tokens, do_sample=False) # for deterministic generation
 
     if args.run_all_models:
         for full_model_name in model_list:
@@ -217,11 +250,19 @@ if __name__ == '__main__':
             print(f'Evaluating on {full_model_name}')
 
             with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-                acc = evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, args.num_shots, generate_kwargs, f)
+                results = evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, args.num_shots, generate_kwargs, f)
             
-            print(f'Acc: {acc}')
-            with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-                f.write(f"Acc: {acc}\n")
+            wrong_responses = results["wrong_responses"]
+            del results["wrong_responses"]
+
+            print(results)
+            with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.json'), 'w') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
+
+            if args.record_wrong:
+                with open(os.path.join(save_name, f'wrong_responses_{args.max_new_tokens}_{args.num_shots}shot.jsonl'), 'w') as f:
+                    for item in wrong_responses:
+                        f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     else:
         full_model_name = args.model_name
@@ -231,12 +272,19 @@ if __name__ == '__main__':
         print(f'Evaluating on {full_model_name}')
 
         with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-            acc = evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, args.num_shots, generate_kwargs, f)
+            results = evaluate_model_on_gsm8k(model, tokenizer, dataset, evaluator, args.num_shots, generate_kwargs, args.record_wrong, f)
         
-        print(f'Acc: {acc}')
-        with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-            f.write(f"Acc: {acc}\n")
+        wrong_responses = results["wrong_responses"]
+        del results["wrong_responses"]
 
+        print(results)
+        with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.json'), 'w') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+
+        if args.record_wrong:
+            with open(os.path.join(save_name, f'wrong_responses_{args.max_new_tokens}_{args.num_shots}shot.jsonl'), 'w') as f:
+                for item in wrong_responses:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
         
 

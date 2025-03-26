@@ -8,6 +8,7 @@
 
 ### Progress report
 - [Overleaf](https://www.overleaf.com/project/67cf81901a767d1139f847c2)
+- [Feedback_from_GSI](https://docs.google.com/document/d/14Sd68yx7xnaP-9q41zrw6TG-U0IKdbht7Cdl5zPkSEo/edit?tab=t.0)
 
 ### Figures
 - [Draft of pipeline (ppt)](https://docs.google.com/presentation/d/1gRKyR6IzvaHC422wtyEJgwrPzZ_mMLHr7fsAM-wF3G4/edit?usp=sharing)

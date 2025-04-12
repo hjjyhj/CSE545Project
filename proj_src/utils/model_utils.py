@@ -41,7 +41,7 @@ def load_model_and_tokenizer(model_name):
     return tokenizer, model
 
 
-def generate_model_outputs(model, tokenizer, prompt, num_beams=5, max_new_tokens=512):
+def generate_model_outputs(model, tokenizer, prompt, num_beams=5, max_new_tokens=1024):
     """
     Generate outputs from a model using beam search.
     

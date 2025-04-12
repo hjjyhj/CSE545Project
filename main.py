@@ -1,5 +1,6 @@
 import torch
 import os
+from openai import OpenAI
 
 # Import configuration
 from proj_src.utils.config import (
@@ -30,7 +31,8 @@ def main():
     current_prompts = [ORIGINAL_PROMPT] * len(MODEL_LIST)
     
     # Load judge model once at the beginning
-    judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
+    # judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
+    judge_model = OpenAI(api_key="sk-4673fd7bbbd445f380b30ab883a43b05", base_url="https://api.deepseek.com")
     
     # Iterate until max iterations or consensus is reached
     for iteration in range(MAX_ITERATIONS):
@@ -83,10 +85,9 @@ def main():
         # Get judge's evaluation
         judge_response = get_judge_evaluation(
             judge_model, 
-            judge_tokenizer, 
             judge_prompt
         )
-        
+
         # Check if we have a final answer or need another iteration
         if is_final_iteration or judge_response.strip().startswith("Final Answer:"):
             print("Final evaluation:")

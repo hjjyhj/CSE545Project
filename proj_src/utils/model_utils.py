@@ -1,5 +1,6 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, Gemma3ForCausalLM
+from openai import OpenAI
 
 def load_model_and_tokenizer(model_name):
     """
@@ -13,17 +14,26 @@ def load_model_and_tokenizer(model_name):
     """
     print(f"Loading model: {model_name}")
     
-    # Common parameters for all models
-    model_kwargs = {
-        "torch_dtype": torch.float16,
-        "device_map": "auto",
-        "trust_remote_code": True
-    }
-    
-    # Load tokenizer and model
+    if "gemma" in model_name.lower():
+        model = Gemma3ForCausalLM.from_pretrained(
+            model_name,
+            # device_map="auto",
+            torch_dtype=torch.bfloat16,
+            # trust_remote_code=True,
+        ).cuda().eval()
+    else:
+
+        # Common parameters for all models
+        model_kwargs = {
+            "torch_dtype": torch.float16,
+            "device_map": "auto",
+            "trust_remote_code": True
+        }
+        
+        # Load tokenizer and model
+        model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
-    
     # Ensure pad token is set
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -76,35 +86,47 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=5, max_new_tokens
     return model_outputs
 
 
-def get_judge_evaluation(judge_model, judge_tokenizer, judge_prompt):
-    """
-    Get evaluation from the judge model.
+# Replace with deepseek
+def get_judge_evaluation(judge_model, judge_prompt):
+    # """
+    # Get evaluation from the judge model.
     
-    Args:
-        judge_model: The judge language model
-        judge_tokenizer: The tokenizer for the judge model
-        judge_prompt (str): The prompt for the judge
+    # Args:
+    #     judge_model: The judge language model
+    #     judge_tokenizer: The tokenizer for the judge model
+    #     judge_prompt (str): The prompt for the judge
         
-    Returns:
-        str: The judge's response
-    """
-    # Tokenize judge prompt
-    tokenized_input = judge_tokenizer(judge_prompt, return_tensors="pt", padding=True)
-    input_ids = tokenized_input.input_ids.to(judge_model.device)
-    attention_mask = tokenized_input.attention_mask.to(judge_model.device)
+    # Returns:
+    #     str: The judge's response
+    # """
+    # # Tokenize judge prompt
+    # tokenized_input = judge_tokenizer(judge_prompt, return_tensors="pt", padding=True)
+    # input_ids = tokenized_input.input_ids.to(judge_model.device)
+    # attention_mask = tokenized_input.attention_mask.to(judge_model.device)
     
-    # Generate judge's evaluation
-    output = judge_model.generate(
-        input_ids,
-        attention_mask=attention_mask,
-        max_new_tokens=2048,
-        num_beams=10,
-        early_stopping=True,
-        pad_token_id=judge_tokenizer.pad_token_id
+    # # Generate judge's evaluation
+    # output = judge_model.generate(
+    #     input_ids,
+    #     attention_mask=attention_mask,
+    #     max_new_tokens=2048,
+    #     num_beams=10,
+    #     early_stopping=True,
+    #     pad_token_id=judge_tokenizer.pad_token_id
+    # )
+    
+    # # Extract only the generated part (excluding the prompt)
+    # prompt_length = input_ids.shape[-1]
+    # generated_tokens = output[0][prompt_length:]
+    
+    # return judge_tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    #  
+    response = judge_model.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": judge_prompt},
+        ],
+        stream=False
     )
-    
-    # Extract only the generated part (excluding the prompt)
-    prompt_length = input_ids.shape[-1]
-    generated_tokens = output[0][prompt_length:]
-    
-    return judge_tokenizer.decode(generated_tokens, skip_special_tokens=True) 
+    print(response.choices[0].message.content) 
+    return (response.choices[0].message.content)

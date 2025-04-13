@@ -63,7 +63,7 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=1, max_new_tokens
     tokenized_input = tokenizer(prompt, return_tensors="pt", padding=True)
     input_ids = tokenized_input.input_ids.to(model.device)
     attention_mask = tokenized_input.attention_mask.to(model.device)
-    
+
     # Generate outputs using beam search
     outputs = model.generate(
         input_ids,

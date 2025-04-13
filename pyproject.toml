@@ -9,5 +9,5 @@ dependencies = [
     'importlib-metadata; python_version>"3.10"',
     'torch', 'torchvision', 'scikit-learn', 'sentencepiece',
     'transformers', 'datasets', 'accelerate',
-    'protobuf', 'huggingface_hub', openai
+    'protobuf', 'huggingface_hub', 'openai'
 ]

@@ -95,11 +95,13 @@ def main():
             break
             
         # If no consensus, update prompts for next iteration
-        if judge_response.strip().startswith("No Consensus"):
+        if "No Consensus" in judge_response:
+            
             current_prompts = update_prompts_from_feedback(
                 ORIGINAL_PROMPT, 
                 judge_response
             )
+            print(current_prompts[0])
     
     print("=" * 80)
     print("Process completed")

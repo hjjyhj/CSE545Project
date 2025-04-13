@@ -5,7 +5,7 @@ os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_
 
 # Configuration parameters
 K_OUTPUTS_PER_MODEL = 2  # Number of top outputs to select from each model
-MAX_ITERATIONS = 5       # Maximum number of consensus-seeking iterations
+MAX_ITERATIONS = 3       # Maximum number of consensus-seeking iterations
 
 # Small language models (SLMs) to use for generating candidate answers
 MODEL_LIST = [
@@ -18,4 +18,5 @@ MODEL_LIST = [
 JUDGE_MODEL_NAME = "deepseek-chat"
 
 # Input problem statement
-ORIGINAL_PROMPT = "Charlie wants to sell beeswax candles.  For every pound of beeswax, he can make 10 tapered candles.  One pound of beeswax and the wicks cost $10.00 in supplies.   If he sells each candle for $2.00 each, what is his net profit if he makes and sells 20 candles?"
+ORIGINAL_PROMPT = "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?"
+# "Charlie wants to sell beeswax candles.  For every pound of beeswax, he can make 10 tapered candles.  One pound of beeswax and the wicks cost $10.00 in supplies.   If he sells each candle for $2.00 each, what is his net profit if he makes and sells 20 candles?"

@@ -2,6 +2,10 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, Gemma3ForCausalLM
 from openai import OpenAI
 
+# torch.backends.cuda.enable_mem_efficient_sdp(False)
+# torch.backends.cuda.enable_flash_sdp(False)
+# torch.backends.cuda.enable_math_sdp(True)
+
 def load_model_and_tokenizer(model_name):
     """
     Load a model and its tokenizer with appropriate configurations based on model type.
@@ -41,7 +45,7 @@ def load_model_and_tokenizer(model_name):
     return tokenizer, model
 
 
-def generate_model_outputs(model, tokenizer, prompt, num_beams=5, max_new_tokens=512):
+def generate_model_outputs(model, tokenizer, prompt, num_beams=1, max_new_tokens=1024):
     """
     Generate outputs from a model using beam search.
     
@@ -65,9 +69,10 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=5, max_new_tokens
         input_ids,
         attention_mask=attention_mask,
         max_new_tokens=max_new_tokens,
+        do_sample=False,
         num_beams=num_beams,
         num_return_sequences=num_beams,
-        early_stopping=True,
+        # early_stopping=True,
         pad_token_id=tokenizer.pad_token_id
     )
     

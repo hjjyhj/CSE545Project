@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, Gemma3ForCausalLM
 from openai import OpenAI
+from google import genai
 
 # torch.backends.cuda.enable_mem_efficient_sdp(False)
 # torch.backends.cuda.enable_flash_sdp(False)
@@ -125,13 +126,20 @@ def get_judge_evaluation(judge_model, judge_prompt):
     
     # return judge_tokenizer.decode(generated_tokens, skip_special_tokens=True)
     #  
-    response = judge_model.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": judge_prompt},
-        ],
-        stream=False
+    # response = judge_model.chat.completions.create(
+    #     model="deepseek-chat",
+    #     messages=[
+    #         {"role": "system", "content": "You are a helpful assistant"},
+    #         {"role": "user", "content": judge_prompt},
+    #     ],
+    #     stream=False
+    # )
+    # print(response.choices[0].message.content) 
+    # return (response.choices[0].message.content)
+
+
+    response = judge_model.models.generate_content(
+        model="gemini-2.0-flash", contents=judge_prompt
     )
-    print(response.choices[0].message.content) 
-    return (response.choices[0].message.content)
+    print(response.text)
+    return response.text

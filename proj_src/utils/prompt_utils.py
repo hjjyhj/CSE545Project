@@ -14,53 +14,38 @@ def create_consensus_prompt(original_prompt, candidate_answers, is_final_iterati
         str: The prompt for the judge model
     """
     # Base prompt with original question and candidate answers
-    prompt = f"""Below are candidate answers for the question: "{original_prompt}"
-Candidate Answers:
+    prompt = f"""Above are candidate answers.
 """
-    # Add each candidate answer
-    for entry in candidate_answers:
-        prompt += f"- {entry['output']}\n"
+    # # Add each candidate answer
+    # for entry in candidate_answers:
+    #     prompt += f"- {entry['output']}\n"
     
     # Add instructions based on whether it's the final iteration
     if is_final_iteration:
         
         prompt += """
-        IMPORTANT: Imagine you are just a summarizer, and you don't have any reasoning ability. Make sure to only summarize the answer from the inputs given.
-        Please analyze the candidate answers above and determine the most frequent final answer. 
+        Please analyze the candidate answers above and determine the most popular final answer. 
         Do not repeat the candidate answers or the question. 
-        Based solely on the candidate answers, provide one concise final answer along with a detailed explanation of your reasoning.
-        Please do not provide the candidate answers on the answer. If there is no consensus on the candidate answers, output the most popular answer.
-        Do not add any reasoning of your own. Only use the output from the input given.
+        If there is no consensus on the candidate answers, output the most popular answer.
+        Only use the output from the input given.
         Your final answer should be in the following format:
 
         Final Answer: <your answer>
-        Reasoning: <detailed explanation>
         """
     else:
         prompt += """
-        IMPORTANT: Imagine you are just a summarizer, and you don't have any reasoning ability. Make sure to only summarize the answer from the inputs given.
-        Please analyze the candidate answers above and decide whether there is consensus among them.
-        Only when there is a complete consensus amongst the models, based solely on the candidate answers, provide one concise final answer along with a detailed explanation of your reasoning.
-        Please do not provide the candidate answers on the answer. Do not add any reasoning of your own. Only use the output from the input given.
-        Output your final answer in the following format:
+        Please analyze the candidate answers above and determine the most popular final answer. 
+        Do not repeat the candidate answers or the question. 
+        If there is no consensus on the candidate answers, output the most popular answer.
+        Only use the output from the input given.
+        Your final answer should be in the following format:
 
         Final Answer: <your answer>
-        Reasoning: <detailed explanation>
 
         If there is no consensus, we would like to prompt the small models again with the original question + reasoning process and answer from those models. 
         
-        Please output in the following format:
+        Please output "No consensus"
         
-        No Consensus. Refer to the output from the models and rethink about the reasoning process. 
-        Specific Info:
-        <model_1> answered <majority_answer_from_model_1>. Here is the reasoning process for this answer: <reasoning_process_for_model_1> 
-        <model_2> answered <majority_answer_from_model_2>. Here is the reasoning process for this answer: <reasoning_process_for_model_2>
-        <model_3> answered <majority_answer_from_model_3>. Here is the reasoning process for this answer: <reasoning_process_for_model_3>
-
-        Note that each model can output multiple answers using beam search. For the majority_answer, give the most popular answer from each model.
-        If there is a tie, give any number out of the most popular candidates. Do not add any reasoning of your own. Only use the output from the input given.
-        Do not repeat the candidate answers or the question.
-        You MUST follow the output format I provided to you.
         """
     
     return prompt

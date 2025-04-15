@@ -139,7 +139,7 @@ def get_judge_evaluation(judge_model, judge_prompt):
 
 
     response = judge_model.models.generate_content(
-        model="gemini-2.0-flash", contents=judge_prompt
+        model="gemini-1.5-flash-8b", contents=judge_prompt
     )
-    print(response.text)
+    # print(response.text)
     return response.text

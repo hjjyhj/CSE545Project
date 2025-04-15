@@ -4,6 +4,8 @@ from openai import OpenAI
 from google import genai
 import re
 
+os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
+
 # Import configuration
 from proj_src.utils.config import (
     MODEL_LIST, 
@@ -29,35 +31,36 @@ top_candidate_answers = [[{'model': 'Gemma3ForCausalLM', 'beam': 1, 'output': 'I
 , [{'model': 'Qwen2ForCausalLM', 'beam': 1, 'output': "If Marcy works for the same company for 40 years, she gets an annual pension of $50,000/year. Starting after 20 years, she becomes entitled to 5% of the value of the pension per year. If she quits after 30 years, what will her annual pension be? To determine Marcy's annual pension after 30 years of working, we need to break down the problem into two parts: the first 20 years and the next 10 years.\n\n1. **Calculate the pension for the first 20 years:**\n   - For the first 20 years, Marcy receives a fixed annual pension of $50,000.\n   - Therefore, her total pension for the first 20 years is:\n     \\[\n     20 \\times 50,000 = 1,000,000\n     \\]\n\n2. **Calculate the pension for the next 10 years:**\n   - After 20 years, Marcy becomes entitled to 5% of the value of her pension each year.\n   - The value of her pension at the start of the 21st year is $50,000.\n   - Each year, her pension increases by 5%, so the pension in the 21st year will be:\n     \\[\n     50,000 \\times 1.05 = 52,500\n     \\]\n   - In the 22nd year, her pension will be:\n     \\[\n     52,500 \\times 1.05 = 55,125\n     \\]\n   - This pattern continues, with her pension increasing by 5% each year. The pension in the \\(n\\)-th year after the 20th year (i.e., the \\(n\\)-th year overall) can be expressed as:\n     \\[\n     50,000 \\times (1.05)^{n-20}\n     \\]\n   - We need to find the sum of her pension from the 21st year to the 30th year. This is a geometric series with the first term \\(a = 52,500\\) and common ratio \\(r = 1.05\\), and there are 10 terms in this series.\n   - The sum \\(S_n\\) of the first \\(n\\) terms of a geometric series is given by:\n     \\[\n     S_n = a \\frac{r^n - 1}{r - 1}\n     \\]\n   - Substituting the values, we get:\n     \\[\n     S_{10} = 52,500 \\frac{(1.05)^{10} - 1}{1.05 - 1}\n     \\]\n   - First, calculate \\((1.05)^{10}\\):\n     \\[\n     (1.05)^{10} \\approx 1.62889\n     \\]\n   - Then, substitute back into the formula:\n     \\[\n     S_{10} = 52,500 \\frac{1.62889 - 1}{0.05} = 52,500 \\frac{0.62889}{0.05} = 52,500 \\times 12.5778 = 660,000\n     \\]\n\n3. **Calculate the total pension after 30 years:**\n   - Add the pension for the first 20 years to the pension for the next 10 years:\n     \\[\n     1,000,000 + 660,000 = 1,660,000\n     \\]\n   - Since she quits after 30 years, her annual pension will be the total pension divided by 10 years:\n     \\[\n     \\frac{1,660,000}{10} = 166,000\n     \\]\n\nTherefore, her annual pension after 30 years is \\(\\boxed{166000}\\)."}]
 ]
 
-summary_prompt = """You are just a summarizer. Only use the input provided to you, and do not solve or reason about the problem even if it's not correct.
+summary_prompt = """You are just a summarizer. Only use the input provided to you, and do not solve or reason about the answer even if it's not correct.
 Please analyze the answer above and summarize the reasoning process for the answer derived.
 Do not repeat the candidate answer or the question. 
 Your final answer should be in the following JSON format:
 
 {
   "answer": <single-number answer from input>,
-  "steps": <summary of derivation>
+  "solution": <single-string summary of derivation>
 }
 """
 
-judge_model = genai.Client(api_key="AIzaSyBYcoEwGqhcFMHpkLcN9jlkLS21txReF9E")
+judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
 judge_ans = {"model1" : "", "model2": "", "model3": ""}
 for i, key in enumerate(judge_ans.keys()):
-	judge_ans[key] = get_judge_evaluation(judge_model, ORIGINAL_PROMPT + top_candidate_answers[i][0]['output'] + summary_prompt)
+	judge_ans[key] = get_judge_evaluation(judge_model, judge_tokenizer, ORIGINAL_PROMPT + top_candidate_answers[i][0]['output'] + summary_prompt)
 
 # for model, output in judge_ans.items():
 #     print(model+":")
 #     print(output)
 
 consensus_prompt = """
-Please analyze the candidate answers above and determine whether there is consensus and the most popular final answer.
-Do not repeat the candidate answers or the question. 
+Please analyze the candidate answers above and determine the most popular final answer and whether there is complete agreement.
+Do not repeat the candidate answers or the question.
 If there is no consensus on the candidate answers, output the most popular answer.
+If all answers are different, select the best one.
 Only use the output from the input given.
 Your final answer should be in the following JSON format:
 
 {
-  consensus: <is there consensus, true or false>
+  consensus: <are all the answers the same, true or false>
   final_answer: <most popular answer as a number>
 }
 
@@ -65,7 +68,7 @@ Your final answer should be in the following JSON format:
 
 print(''.join([ans for ans in judge_ans.values()]))
 
-final_answer = get_judge_evaluation(judge_model, ''.join([ans for ans in judge_ans.values()]) + consensus_prompt)
+final_answer = get_judge_evaluation(judge_model, judge_tokenizer, ''.join([ans for ans in judge_ans.values()]) + consensus_prompt)
 
 print('')
 print('')

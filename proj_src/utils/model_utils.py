@@ -93,7 +93,7 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=1, max_new_tokens
 
 
 # Replace with deepseek
-def get_judge_evaluation(judge_model, judge_prompt):
+def get_judge_evaluation(judge_model,judge_tokenizer, judge_prompt):
     # """
     # Get evaluation from the judge model.
     
@@ -105,26 +105,26 @@ def get_judge_evaluation(judge_model, judge_prompt):
     # Returns:
     #     str: The judge's response
     # """
-    # # Tokenize judge prompt
-    # tokenized_input = judge_tokenizer(judge_prompt, return_tensors="pt", padding=True)
-    # input_ids = tokenized_input.input_ids.to(judge_model.device)
-    # attention_mask = tokenized_input.attention_mask.to(judge_model.device)
+    # Tokenize judge prompt
+    tokenized_input = judge_tokenizer(judge_prompt, return_tensors="pt", padding=True)
+    input_ids = tokenized_input.input_ids.to(judge_model.device)
+    attention_mask = tokenized_input.attention_mask.to(judge_model.device)
     
-    # # Generate judge's evaluation
-    # output = judge_model.generate(
-    #     input_ids,
-    #     attention_mask=attention_mask,
-    #     max_new_tokens=2048,
-    #     num_beams=10,
-    #     early_stopping=True,
-    #     pad_token_id=judge_tokenizer.pad_token_id
-    # )
+    # Generate judge's evaluation
+    output = judge_model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        max_new_tokens=2048,
+        num_beams=10,
+        early_stopping=True,
+        pad_token_id=judge_tokenizer.pad_token_id
+    )
     
-    # # Extract only the generated part (excluding the prompt)
-    # prompt_length = input_ids.shape[-1]
-    # generated_tokens = output[0][prompt_length:]
+    # Extract only the generated part (excluding the prompt)
+    prompt_length = input_ids.shape[-1]
+    generated_tokens = output[0][prompt_length:]
     
-    # return judge_tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    return judge_tokenizer.decode(generated_tokens, skip_special_tokens=True)
     #  
     # response = judge_model.chat.completions.create(
     #     model="deepseek-chat",
@@ -138,8 +138,8 @@ def get_judge_evaluation(judge_model, judge_prompt):
     # return (response.choices[0].message.content)
 
 
-    response = judge_model.models.generate_content(
-        model="gemini-1.5-flash-8b", contents=judge_prompt
-    )
-    # print(response.text)
-    return response.text
+    # response = judge_model.models.generate_content(
+    #     model="gemini-1.5-flash-8b", contents=judge_prompt
+    # )
+    # # print(response.text)
+    # return response.text

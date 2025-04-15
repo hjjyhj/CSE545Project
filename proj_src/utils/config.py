@@ -15,7 +15,7 @@ MODEL_LIST = [
 ]
 
 # Judge model for evaluating consensus (larger model)
-JUDGE_MODEL_NAME = "deepseek-chat"
+JUDGE_MODEL_NAME = "google/gemma-3-4b-it"
 
 # Input problem statement
 ORIGINAL_PROMPT = "If Marcy works for the same company for 40 years, she gets an annual pension of $50,000/year. Starting after 20 years, she becomes entitled to 5% of the value of the pension per year. If she quits after 30 years, what will her annual pension be?"

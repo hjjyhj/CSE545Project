@@ -60,8 +60,8 @@ Only use the output from the input given.
 Your final answer should be in the following JSON format:
 
 {
-  consensus: <are all the answers the same, true or false>
-  final_answer: <most popular answer as a number>
+  "consensus": <are all the answers the same as a bool>
+  "final_answer": <most popular answer as a number>
 }
 
 """

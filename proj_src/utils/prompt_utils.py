@@ -31,10 +31,11 @@ Candidate Answers:
         Based solely on the candidate answers, provide one concise final answer along with a detailed explanation of your reasoning.
         Please do not provide the candidate answers on the answer. If there is no consensus on the candidate answers, output the most popular answer.
         Do not add any reasoning of your own. Only use the output from the input given.
-        Your final answer should be in the following format:
+        Your response should be in the following format (Don't use $\box$ for the Final Answer, just put the number there):
 
-        Final Answer: <your answer>
+        Final Conclusion:
         Reasoning: <detailed explanation>
+        Final Answer: <your answer>
         """
     else:
         prompt += """
@@ -42,10 +43,11 @@ Candidate Answers:
         Please analyze the candidate answers above and decide whether there is consensus among them.
         Only when there is a complete consensus amongst the models, based solely on the candidate answers, provide one concise final answer along with a detailed explanation of your reasoning.
         Please do not provide the candidate answers on the answer. Do not add any reasoning of your own. Only use the output from the input given.
-        Output your final answer in the following format:
+        Output your final answer in the following format (Don't use $\box$ for the Final Answer, just put the number there):
 
-        Final Answer: <your answer>
+        Final Conclusion:
         Reasoning: <detailed explanation>
+        Final Answer: <your answer>
 
         If there is no consensus, we would like to prompt the small models again with the original question + reasoning process and answer from those models. 
         

@@ -36,7 +36,7 @@ def load_model_and_tokenizer(model_name):
         }
         
         # Load tokenizer and model
-        model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs).eval()
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     # Ensure pad token is set
@@ -66,16 +66,17 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=1, max_new_tokens
     attention_mask = tokenized_input.attention_mask.to(model.device)
 
     # Generate outputs using beam search
-    outputs = model.generate(
-        input_ids,
-        attention_mask=attention_mask,
-        max_new_tokens=max_new_tokens,
-        do_sample=False,
-        num_beams=num_beams,
-        num_return_sequences=num_beams,
-        # early_stopping=True,
-        pad_token_id=tokenizer.pad_token_id
-    )
+    with torch.no_grad():
+        outputs = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            num_beams=num_beams,
+            num_return_sequences=num_beams,
+            # early_stopping=True,
+            pad_token_id=tokenizer.pad_token_id
+        )
     
     # Process and collect outputs
     model_outputs = []
@@ -111,14 +112,15 @@ def get_judge_evaluation(judge_model,judge_tokenizer, judge_prompt):
     attention_mask = tokenized_input.attention_mask.to(judge_model.device)
     
     # Generate judge's evaluation
-    output = judge_model.generate(
-        input_ids,
-        attention_mask=attention_mask,
-        max_new_tokens=2048,
-        num_beams=10,
-        early_stopping=True,
-        pad_token_id=judge_tokenizer.pad_token_id
-    )
+    with torch.no_grad():
+        output = judge_model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=2048,
+            num_beams=10,
+            early_stopping=True,
+            pad_token_id=judge_tokenizer.pad_token_id
+        )
     
     # Extract only the generated part (excluding the prompt)
     prompt_length = input_ids.shape[-1]

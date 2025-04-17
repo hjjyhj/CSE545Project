@@ -116,8 +116,8 @@ def get_judge_evaluation(judge_model,judge_tokenizer, judge_prompt):
         output = judge_model.generate(
             input_ids,
             attention_mask=attention_mask,
-            max_new_tokens=2048,
-            num_beams=10,
+            max_new_tokens=1024,
+            num_beams=1,
             early_stopping=True,
             pad_token_id=judge_tokenizer.pad_token_id
         )

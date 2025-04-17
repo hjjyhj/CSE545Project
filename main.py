@@ -4,6 +4,7 @@ import gc
 from openai import OpenAI
 
 os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 # Import configuration
 from proj_src.utils.config import (
@@ -37,10 +38,6 @@ def main():
     # Initialize current prompts for each model
     current_prompts = [ORIGINAL_PROMPT] * len(MODEL_LIST)
     
-    # Load judge model once at the beginning
-    judge_tokenizer, judge_model = None, None # load later
-    # judge_model = OpenAI(api_key="sk-4673fd7bbbd445f380b30ab883a43b05", base_url="https://api.deepseek.com")
-    
     # Iterate until max iterations or consensus is reached
     for iteration in range(MAX_ITERATIONS):
         print("=" * 80)
@@ -55,41 +52,16 @@ def main():
             print(f"Generating answers from: {model_name}")
             print("-" * 80)
             
-            if model_name != JUDGE_MODEL_NAME:
-                # Load model and tokenizer
-                tokenizer, model = load_model_and_tokenizer(model_name)
-            else:
-                if judge_model == None:
-                    judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
-                tokenizer, model = judge_tokenizer, judge_model
+            # Load model and tokenizer
+            tokenizer, model = load_model_and_tokenizer(model_name)
             
             # Generate and collect outputs
-            try:
-                model_outputs = generate_model_outputs(
-                    model, 
-                    tokenizer, 
-                    current_prompts[model_idx]
-                )
-            except RuntimeError as e:
-                print("Error, freeing judge model and re-running")
-                print(e)
-                if "out of memory" not in str(e).lower():
-                    raise
-                assert model_name != JUDGE_MODEL_NAME
-                # try again without judge model loaded
-                del judge_model, judge_tokenizer
-                # del judge_model, judge_tokenizer, tokenizer, model
-                judge_tokenizer, judge_model = None, None
-                gc.collect()
-                torch.cuda.empty_cache()
-                a
-                # tokenizer, model = load_model_and_tokenizer(model_name)
-                model_outputs = generate_model_outputs(
-                    model, 
-                    tokenizer, 
-                    current_prompts[model_idx]
-                )
-        
+            model_outputs = generate_model_outputs(
+                model, 
+                tokenizer, 
+                current_prompts[model_idx]
+            )
+            
             # Sort outputs by length (assuming longer answers might be more detailed)
             sorted_outputs = sorted(
                 model_outputs, 
@@ -103,22 +75,22 @@ def main():
             # Free up memory
             # Keep it if the memory is the issue
             # If you have enough memory, COMMENT IT to prevent the cost of loading the model again
-            if model_name != JUDGE_MODEL_NAME:
-                del model, tokenizer
-                gc.collect()
-                torch.cuda.empty_cache()
+            del model, tokenizer
+            gc.collect()
+            torch.cuda.empty_cache()
         
 
-        # Load judge model if not loaded
-        if judge_model == None:
-            judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
+        # Load judge model
+        judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
 
         # Use judge to summarize answers
         summarized_answers = {}
         for answer in top_candidate_answers:
             assert answer["model"] not in summarized_answers # not gonna deal with multiple beams per model
-            summary_prompt = create_summary_prompt(ORIGINAL_PROMPT, answer["output"])
+            summary_prompt = create_summary_prompt(answer["output"])
             summarized_answers[answer["model"]] = get_judge_evaluation(judge_model, judge_tokenizer, summary_prompt)
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # Create prompt for judge to evaluate consensus
         is_final_iteration = (iteration == MAX_ITERATIONS - 1)
@@ -145,6 +117,11 @@ def main():
                 list(summarized_answers.values()),
             )] * len(current_prompts)
             print(current_prompts[0])
+
+        # Free memory used for judge model
+        del judge_model, judge_tokenizer
+        gc.collect()
+        torch.cuda.empty_cache()
     
     print("=" * 80)
     print("Process completed")

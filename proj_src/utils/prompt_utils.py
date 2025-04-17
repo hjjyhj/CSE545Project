@@ -4,8 +4,8 @@ from proj_src.utils.output_utils import (
     extract_answer_solution
 )
 
-def create_summary_prompt(original_prompt: str, candidate_answer_output: str):
-    summary_prompt = original_prompt + '\n' + candidate_answer_output
+def create_summary_prompt(candidate_answer_output: str):
+    summary_prompt = candidate_answer_output # candidate_answer_output contains original prompt
     summary_prompt += """
 
 You are just a summarizer. Only use the input provided to you, and do not solve or reason about the answer even if it's not correct.

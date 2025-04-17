@@ -1,5 +1,6 @@
 import os
 os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -7,6 +8,7 @@ warnings.filterwarnings("ignore")
 import argparse
 import re
 import json
+import gc
 from symeval import EvaluatorMathBatch
 
 from datasets import load_dataset
@@ -18,9 +20,7 @@ from transformers import (
 )
 
 from proj_src.init_eval.gsm8k.utils import download_url, load_jsonl, record_wrong_responses
-import torch
 import os
-from openai import OpenAI
 
 # Import configuration
 from proj_src.utils.config import (
@@ -37,8 +37,12 @@ from proj_src.utils.model_utils import (
     get_judge_evaluation
 )
 from proj_src.utils.prompt_utils import (
+    create_summary_prompt, 
     create_consensus_prompt, 
     update_prompts_from_feedback
+)
+from proj_src.utils.output_utils import (
+    extract_consensus_final
 )
 
 # # Define the prompt template
@@ -83,10 +87,6 @@ def get_response_from_whole_system(original_prompt):
     # Initialize current prompts for each model
     current_prompts = [original_prompt] * len(MODEL_LIST)
     
-    # Load judge model once at the beginning
-    # judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
-    judge_model = OpenAI(api_key="sk-4673fd7bbbd445f380b30ab883a43b05", base_url="https://api.deepseek.com")
-    
     # Iterate until max iterations or consensus is reached
     for iteration in range(MAX_ITERATIONS):
         print("=" * 80)
@@ -115,7 +115,7 @@ def get_response_from_whole_system(original_prompt):
             
             # Sort outputs by length (assuming longer answers might be more detailed)
             sorted_outputs = sorted(
-                model_outputs,
+                model_outputs, 
                 key=lambda output: len(output["output"]), 
                 reverse=True
             )
@@ -127,38 +127,54 @@ def get_response_from_whole_system(original_prompt):
             # Keep it if the memory is the issue
             # If you have enough memory, COMMENT IT to prevent the cost of loading the model again
             del model, tokenizer
+            gc.collect()
             torch.cuda.empty_cache()
         
+
+        # Load judge model
+        judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
+
+        # Use judge to summarize answers
+        summarized_answers = {}
+        for answer in top_candidate_answers:
+            assert answer["model"] not in summarized_answers # not gonna deal with multiple beams per model
+            summary_prompt = create_summary_prompt(answer["output"])
+            summarized_answers[answer["model"]] = get_judge_evaluation(judge_model, judge_tokenizer, summary_prompt)
+            gc.collect()
+            torch.cuda.empty_cache()
+
         # Create prompt for judge to evaluate consensus
         is_final_iteration = (iteration == MAX_ITERATIONS - 1)
         judge_prompt = create_consensus_prompt(
             original_prompt, 
-            top_candidate_answers, 
-            is_final_iteration
+            list(summarized_answers.values())
         )
         
         # Get judge's evaluation
-        judge_response = get_judge_evaluation(
-            judge_model, 
-            judge_prompt
-        )
+        judge_response = get_judge_evaluation(judge_model, judge_tokenizer, judge_prompt)
+        consensus,final_answer = extract_consensus_final(judge_response)
         print("=== judge response ===")
+        print('\n'.join(list(summarized_answers.values())))
         print(judge_response)
 
         # Check if we have a final answer or need another iteration
-        if is_final_iteration or judge_response.strip().startswith("Final Conclusion:"):
+        if is_final_iteration or consensus:
             print("=== Final evaluation: ===")
             # final response by the whole system, given by the judge model, ends with "Final Answer: XXX"
-            final_judge_response = judge_response.strip()   
+            final_judge_response = f"Final Answer: {final_answer}"
             break
             
         # If no consensus, update prompts for next iteration
-        if "No Consensus" in judge_response:
-            current_prompts = update_prompts_from_feedback(
-                original_prompt,
-                judge_response
-            )
-            # print(current_prompts[0])
+        if not consensus:
+            current_prompts = [update_prompts_from_feedback(
+                original_prompt, 
+                list(summarized_answers.values()),
+            )] * len(current_prompts)
+
+        # Free memory used for judge model
+        del judge_model, judge_tokenizer
+        gc.collect()
+        torch.cuda.empty_cache()
     
     print("=" * 80)
     print("Process completed")

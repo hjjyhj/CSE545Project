@@ -84,11 +84,10 @@ def main():
         judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
 
         # Use judge to summarize answers
-        summarized_answers = {}
+        summarized_answers = []
         for answer in top_candidate_answers:
-            assert answer["model"] not in summarized_answers # not gonna deal with multiple beams per model
             summary_prompt = create_summary_prompt(answer["output"])
-            summarized_answers[answer["model"]] = get_judge_evaluation(judge_model, judge_tokenizer, summary_prompt)
+            summarized_answers.append(get_judge_evaluation(judge_model, judge_tokenizer, summary_prompt))
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -96,7 +95,7 @@ def main():
         is_final_iteration = (iteration == MAX_ITERATIONS - 1)
         judge_prompt = create_consensus_prompt(
             ORIGINAL_PROMPT, 
-            list(summarized_answers.values())
+            summarized_answers
         )
         
         # Get judge's evaluation
@@ -113,7 +112,7 @@ def main():
         if not consensus:
             current_prompts = [update_prompts_from_feedback(
                 ORIGINAL_PROMPT, 
-                list(summarized_answers.values()),
+                summarized_answers,
             )] * len(current_prompts)
 
         # Free memory used for judge model

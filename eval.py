@@ -135,11 +135,10 @@ def get_response_from_whole_system(original_prompt):
         judge_tokenizer, judge_model = load_model_and_tokenizer(JUDGE_MODEL_NAME)
 
         # Use judge to summarize answers
-        summarized_answers = {}
+        summarized_answers = []
         for answer in top_candidate_answers:
-            assert answer["model"] not in summarized_answers # not gonna deal with multiple beams per model
             summary_prompt = create_summary_prompt(answer["output"])
-            summarized_answers[answer["model"]] = get_judge_evaluation(judge_model, judge_tokenizer, summary_prompt)
+            summarized_answers.append(get_judge_evaluation(judge_model, judge_tokenizer, summary_prompt))
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -147,14 +146,14 @@ def get_response_from_whole_system(original_prompt):
         is_final_iteration = (iteration == MAX_ITERATIONS - 1)
         judge_prompt = create_consensus_prompt(
             original_prompt, 
-            list(summarized_answers.values())
+            summarized_answers
         )
         
         # Get judge's evaluation
         judge_response = get_judge_evaluation(judge_model, judge_tokenizer, judge_prompt)
         consensus,final_answer = extract_consensus_final(judge_response)
         print("=== judge response ===")
-        print('\n'.join(list(summarized_answers.values())))
+        print('\n'.join(summarized_answers))
         print(judge_response)
 
         # Check if we have a final answer or need another iteration
@@ -168,7 +167,7 @@ def get_response_from_whole_system(original_prompt):
         if not consensus:
             current_prompts = [update_prompts_from_feedback(
                 original_prompt, 
-                list(summarized_answers.values()),
+                summarized_answers,
             )] * len(current_prompts)
 
         # Free memory used for judge model

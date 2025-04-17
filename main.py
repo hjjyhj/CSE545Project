@@ -101,7 +101,6 @@ def main():
         
         # Get judge's evaluation
         judge_response = get_judge_evaluation(judge_model, judge_tokenizer, judge_prompt)
-        print(judge_response)
         consensus,final_answer = extract_consensus_final(judge_response)
 
         # Check if we have a final answer or need another iteration
@@ -116,7 +115,6 @@ def main():
                 ORIGINAL_PROMPT, 
                 list(summarized_answers.values()),
             )] * len(current_prompts)
-            print(current_prompts[0])
 
         # Free memory used for judge model
         del judge_model, judge_tokenizer
@@ -129,4 +127,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

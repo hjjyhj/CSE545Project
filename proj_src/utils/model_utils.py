@@ -72,6 +72,7 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=1, max_new_tokens
             attention_mask=attention_mask,
             max_new_tokens=max_new_tokens,
             do_sample=False,
+            temperature=0,
             num_beams=num_beams,
             num_return_sequences=num_beams,
             # early_stopping=True,
@@ -88,7 +89,7 @@ def generate_model_outputs(model, tokenizer, prompt, num_beams=1, max_new_tokens
             "output": answer
         }
         model_outputs.append(output_entry)
-        print(f"Beam {beam_idx}: {answer}\n")
+        # print(f"Beam {beam_idx}: {answer}\n")
         
     return model_outputs
 
@@ -136,7 +137,7 @@ def get_judge_evaluation(judge_model,judge_tokenizer, judge_prompt):
     #     ],
     #     stream=False
     # )
-    # print(response.choices[0].message.content) 
+    # # print(response.choices[0].message.content) 
     # return (response.choices[0].message.content)
 
 

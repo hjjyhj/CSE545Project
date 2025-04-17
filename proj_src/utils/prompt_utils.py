@@ -34,7 +34,7 @@ def create_consensus_prompt(original_prompt: str, candidate_answers: list):
     # Base prompt with original question and candidate answers
     prompt = '\n'.join(candidate_answers)
     prompt += """
-Please analyze the candidate answers above and determine the most popular final answer and whether there is complete agreement.
+Please analyze the candidate answers above and determine the most popular final answer and whether there is complete agreement on the answer.
 Do not repeat the candidate answers or the question.
 If there is no consensus on the candidate answers, output the most popular answer.
 If all answers are different, select the best one.

@@ -56,7 +56,7 @@ def extract_answer_solution(json_str):
         
         return answer_val, solution_val
 
-a
+
 def extract_consensus_final(json_str):
     """
     Extract the 'consensus' and 'final_answer' fields from a JSON string,

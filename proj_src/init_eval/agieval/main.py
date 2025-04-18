@@ -1,5 +1,6 @@
 import os
 os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
+os.environ["PYTORCH_USE_SDPA"] = "0"
 from helpers import get_dataset
 import argparse
 import re
@@ -133,14 +134,24 @@ def evaluate_model_on_agieval(model, tokenizer, dataset,num_shots, generate_kwar
         # Generate the model's response
         prompt = format_prompt(question, num_shots)
 
-        input_text = tokenizer(
-            prompt,
-            padding=False,
-            add_special_tokens=True,
-            return_tensors="pt",
-        )
-        input_ids = input_text.input_ids.cuda()
-        attention_mask = input_text.attention_mask.cuda()
+        if re.search(r'gemma', model.config.name_or_path, re.IGNORECASE):
+            input_text = tokenizer(
+                prompt,
+                return_tensors="pt",
+                padding="longest",
+                pad_to_multiple_of=8,  # Key fix for Gemma
+            ).to(model.device)
+            input_ids = input_text["input_ids"]
+            attention_mask = input_text["attention_mask"]
+        else:
+            input_text = tokenizer(
+                prompt,
+                padding=False,
+                add_special_tokens=True,
+                return_tensors="pt",
+            )
+            input_ids = input_text.input_ids.cuda()
+            attention_mask = input_text.attention_mask.cuda()
 
         output_ids = model.generate(
             input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs
@@ -231,7 +242,8 @@ if __name__ == '__main__':
 
 
     model_list = [
-        "stabilityai/stablelm-zephyr-3b",
+          "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf/hub/models--google--gemma-3-4b-it/snapshots/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd",
+        # "stabilityai/stablelm-zephyr-3b",
         # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
         # "meta-llama/Llama-3.2-1B-Instruct",
         # "meta-llama/Llama-3.2-3B-Instruct",
@@ -260,7 +272,7 @@ if __name__ == '__main__':
             print(f'Evaluating on {full_model_name}')
 
             with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-                results = evaluate_model_on_agieval(model, tokenizer, dataset, args.num_shots, generate_kwargs, f)
+                results = evaluate_model_on_agieval(model=model, tokenizer=tokenizer, dataset=dataset, num_shots=args.num_shots, generate_kwargs=generate_kwargs, record_wrong=args.record_wrong, f=f)
             
             wrong_responses = results["wrong_responses"]
             del results["wrong_responses"]
@@ -282,7 +294,7 @@ if __name__ == '__main__':
         print(f'Evaluating on {full_model_name}')
 
         with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-            results = evaluate_model_on_agieval(model, tokenizer, dataset, args.num_shots, generate_kwargs, args.record_wrong, f)
+            results = evaluate_model_on_agieval(model=model, tokenizer=tokenizer, dataset=dataset, num_shots=args.num_shots, generate_kwargs=generate_kwargs, record_wrong=args.record_wrong, f=f)
         
         wrong_responses = results["wrong_responses"]
         del results["wrong_responses"]

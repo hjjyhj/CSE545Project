@@ -9,13 +9,12 @@ MAX_ITERATIONS = 3       # Maximum number of consensus-seeking iterations
 
 # Small language models (SLMs) to use for generating candidate answers
 MODEL_LIST = [
-    "google/gemma-3-4b-it",
     "meta-llama/Llama-3.2-3B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
 ]
 
 # Judge model for evaluating consensus (larger model)
-JUDGE_MODEL_NAME = "google/gemma-3-4b-it"
+JUDGE_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 
 # Input problem statement
 ORIGINAL_PROMPT = "Stephen placed an online order for groceries.  His final bill came to $40.00.  Because this was through a delivery vendor, they tacked on a 25% fee to his final total and charged him $3.00 in delivery fees.  Stephen also added a $4.00 tip.  After the extra fees, what was the final price of Stephen's groceries?" # 57

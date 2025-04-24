@@ -1,6 +1,50 @@
 import re
 from proj_src.utils.config import MODEL_LIST
 
+
+def extract_all_candidate_answers(candidate_answers):
+    extracted_answers = []
+    for entry in candidate_answers:
+        if isinstance(entry, dict) and "output" in entry:
+            raw = entry["output"]
+        elif isinstance(entry, str):
+            raw = entry
+        else:
+            continue
+        letter = extract_answer_from_response(raw)
+        if letter:
+            extracted_answers.append(letter)
+    return extracted_answers
+
+
+
+def extract_answer_from_response(response):
+    """
+    Extracts a valid multiple-choice letter (A–D) from the model's response.
+    Prioritizes \boxed{X} format if present.
+    """
+    # Case 1: In the case of an answer written as '\boxed{C}-like answer'
+    match = re.search(r'\\boxed\{\s*([A-Da-d])\s*\}', response)
+    if match:
+        return match.group(1).upper()
+
+    # Case 2: In the case of something like C, Answer: (C), Answer: **C**, etc.
+    match = re.search(
+        r'Answer:\s*(?:\\boxed\s*\{)?(?:\\text\s*\{)?\**\(?\s*([A-Da-d])\s*\)?\**\}?',
+        response,
+        re.IGNORECASE
+    )
+    if match:
+        return match.group(1).upper()
+
+    # Case 3: As a fallback, we look for a lone capital letter near the end of the response.
+    match = re.search(r'\b([A-Da-d])\b[\s\)\}]*$', response.strip())
+    if match:
+        return match.group(1).upper()
+
+    # No letter, we assume model failed, and no response.
+    return None
+
 def create_consensus_prompt(original_prompt, candidate_answers, is_final_iteration):
     """
     Create a prompt for the judge model to evaluate consensus among candidate answers.
@@ -66,6 +110,82 @@ Candidate Answers:
         """
     
     return prompt
+
+
+def create_consensus_prompt_agieval(original_prompt, candidate_answers, is_final_iteration):
+    """
+    Create a prompt for the judge model to evaluate consensus among candidate answers.
+    
+    Args:
+        original_prompt (str): The original problem statement
+        candidate_answers (list): List of candidate answer dictionaries
+        is_final_iteration (bool): Whether this is the final iteration
+        
+    Returns:
+        str: The prompt for the judge model
+    """
+   # Extract answers from candidates
+    extracted_answers = extract_all_candidate_answers(candidate_answers)
+
+    # Start building the prompt
+    prompt = f"""Below are candidate answers for the question: "{original_prompt}"
+
+Candidate Answers:
+"""
+    for entry in candidate_answers:
+        response = entry["output"] if isinstance(entry, dict) and "output" in entry else str(entry)
+        prompt += f"- {response.strip()}\n"
+
+    # Add extracted answers summary
+    prompt += "\nExtracted Final Answers from Models (A–D if available):\n"
+    prompt += ", ".join(extracted_answers) if extracted_answers else "None extracted"
+
+    # Add instruction
+    if is_final_iteration:
+        prompt += """
+        IMPORTANT: Imagine you are just a summarizer, and you don't have any reasoning ability. Make sure to only summarize the answer from the inputs given.
+        Please analyze the candidate answers above and select the option out of A,B,C, or D that corresponds to the most frequent final answer. 
+        Do not repeat the candidate answers or the question. 
+        Based solely on the candidate answers, provide the answer choice (A,B,C,or,D) along with a detailed explanation of your reasoning.
+        Please do not provide the candidate answers on the answer. If there is no consensus on the candidate answers, output choice (A,B,C,D) that corresponds to the most popular answer.
+        Do not add any reasoning of your own. Only use the output from the input given.
+        Your response should be in the following format (Don't use $\box$ for the Final Answer, just put the number there):
+
+        Final Conclusion:
+        Reasoning: <detailed explanation>
+        Final Answer: <one letter from A to D, based only on the candidate answers>
+        """
+    else:
+        prompt += """
+        IMPORTANT: Imagine you are just a summarizer, and you don't have any reasoning ability. Make sure to only summarize the answer from the inputs given.
+        Please analyze the candidate answers above and decide the option (A,B,C,D) that corresponds to their answers and whether there is consensus among them.
+        Only when there is a complete consensus amongst the models, based solely on the candidate answers, provide one concise final answer choice (A,B,C,D) along with a detailed explanation of your reasoning.
+        Please do not provide the candidate answers on the answer. Do not add any reasoning of your own. Only use the output from the input given.
+        Output your final answer in the following format (Don't use $\box$ for the Final Answer, just put the number there):
+
+        Final Conclusion:
+        Reasoning: <detailed explanation>
+        Final Answer: <one letter from A to D, based only on the candidate answers>
+
+        If there is no consensus, we would like to prompt the small models again with the original question + reasoning process and answer from those models. 
+        
+        Please output in the following format:
+        
+        No Consensus. Refer to the output from the models and rethink about the reasoning process. 
+        Specific Info:
+        <model_1> answered <majority_answer_from_model_1>. Here is the reasoning process for this answer: <reasoning_process_for_model_1> 
+        <model_2> answered <majority_answer_from_model_2>. Here is the reasoning process for this answer: <reasoning_process_for_model_2>
+        <model_3> answered <majority_answer_from_model_3>. Here is the reasoning process for this answer: <reasoning_process_for_model_3>
+
+        Note that each model can output multiple answers using beam search. For the majority_answer, give the most popular answer from each model.
+        If there is a tie, give any number out of the most popular candidates. Do not add any reasoning of your own. Only use the output from the input given.
+        Do not repeat the candidate answers or the question.
+        You MUST follow the output format I provided to you.
+        """
+    
+    return prompt
+
+
 
 
 def update_prompts_from_feedback(original_prompt, judge_response):

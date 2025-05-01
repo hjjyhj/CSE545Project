@@ -1,22 +1,36 @@
+"""
+Author: Larnell Moore
+Purpose: This script is used to evaluate the performance of various models on the AGIEval dataset using
+our framework. This file assumes that all models are individually evaluated.
+"""
+
 import os
 os.environ['HF_HOME'] = "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf"
 os.environ["PYTORCH_USE_SDPA"] = "0"
-from helpers import get_dataset
+from dotenv import load_dotenv
 import argparse
 import re
 import json
-
-from datasets import load_dataset
 from tqdm import tqdm
 import torch
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
+import gc
+from utils import download_url, load_jsonl, record_wrong_responses
+from openai import OpenAI
+
+
+from proj_src.init_eval.agieval.helpers import (
+ determine_reasoning_process_agieval,
+ build_json,
+ load_model_and_tokenizer,
+ prepare_agi_eval_dataset,
+ extract_answer_from_response,
+ check_label,
+ generate_model_outputs
 )
 
-from utils import download_url, load_jsonl, record_wrong_responses
-
-
+# As recommended by the professor during our poster presentation, we can give a model more chances to respond than once given feedback
+# to make the comparsions more fair.
+MAX_ITERATIONS = 3
 
 # Define the prompt template
 INSTRUCTION_TEMPLATE = """
@@ -25,16 +39,15 @@ The correct final answer is guaranteed to be an one of the alphabet choices. You
 Remember to put your final answer on its own line after "Answer: ", and you DO NOT need to use a \\boxed command. The final answer should be as brief as possible.
 """
 
-# max: 3
+# A maximum of three few-shot examples
 few_shot_examples = [
     "Question:\nBetty is saving money for a new wallet which costs $100. Betty has only half of the money she needs. Her parents decided to give her $15 for that purpose, and her grandparents twice as much as her parents. How much more money does Betty need to buy the wallet?\nOptions:\nA) $10\nB) $5\nC) $15\nD) $0\n\nResponse:\nIn the beginning, Betty has 100 / 2 = 50. Her parents gave her $15. Her grandparents gave her 15 * 2 = 30. Total money Betty has: 50 + 15 + 30 = 95. She still needs 100 - 95 = 5 more.\nAnswer: B",
     "Question:\nLisa, Jack, and Tommy earned $60 from washing cars all week. However, half of the $60 was earned by Lisa. Tommy earned half of what Lisa earned. How much more money did Lisa earn than Tommy?\nOptions:\nA) $30\nB) $10\nC) $15\nD) $20\n\nResponse:\nLisa earned 60 * 1/2 = 30. Tommy earned 30 * 1/2 = 15. So, Lisa earned 30 - 15 = 15 more than Tommy.\nAnswer: C",
     "Question:\nGretchen has 110 coins. There are 30 more gold coins than silver coins. How many gold coins does Gretchen have?\nOptions:\nA) 50\nB) 60\nC) 70\nD) 80\n\nResponse:\nLet x be the number of silver coins. Then gold coins = x + 30. So, x + (x + 30) = 110 → 2x + 30 = 110 → 2x = 80 → x = 40. Gold coins = 40 + 30 = 70.\nAnswer: C"
 ]
 
-# Can either be 0 shot or 3 shot at max in this program. 
 def format_prompt(question, num_shots):
-    """
+    """Appeneds each question from AGIEval with the instruction template.
     If zero shot, append instuction template alongside question.
     If few shot, give the model some examples of how to answer.    
     """
@@ -45,269 +58,192 @@ def format_prompt(question, num_shots):
         prompt += (example + '\n')
     return prompt + "\nQuestion:\n" + question + '\n\nResponse:\n'
 
-def extract_answer_from_response(response):
+
+def get_reasoning_path(original_prompt, model_path):
     """
-    Extracts a valid multiple-choice letter (A–D) from the model's response.
-    Prioritizes \boxed{X} format if present.
+    This reasoning path is specialized for the single model tests. 
     """
-    # Case 1: In the case of an answer written as '\boxed{C}-like answer'
-    match = re.search(r'\\boxed\{\s*([A-Da-d])\s*\}', response)
-    if match:
-        return match.group(1).upper()
+    load_dotenv()
+    judge_model = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
+    prev_attempts = {}
+    final_judge_response = ""
 
-    # Case 2: In the case of something like C, Answer: (C), Answer: **C**, etc.
-    match = re.search(
-        r'Answer:\s*(?:\\boxed\s*\{)?(?:\\text\s*\{)?\**\(?\s*([A-Da-d])\s*\)?\**\}?',
-        response,
-        re.IGNORECASE
-    )
-    if match:
-        return match.group(1).upper()
+    for iteration in range(MAX_ITERATIONS):
+        print("=" * 80)
+        print(f"Iteration {iteration + 1}: Generating reasoning path {iteration + 1} of {MAX_ITERATIONS}")
+        print("=" * 80)
 
-    # Case 3: As a fallback, we look for a lone capital letter near the end of the response.
-    match = re.search(r'\b([A-Da-d])\b[\s\)\}]*$', response.strip())
-    if match:
-        return match.group(1).upper()
-
-    # No letter, we assume model failed, and no response.
-    return None
-
-def check_label(model_answer, true_answer):
-    """
-    Compares the model's predicted letter choice with the correct letter answer.
-    """
-    # Ensures it must exist
-    if model_answer is None or true_answer is None:
-        return False
-    # Only returns true if they are both equal, else false
-    return model_answer.strip().upper() == true_answer.strip().upper()
-
-
-def load(model_name_or_path):
-    print(f"Loading model from {model_name_or_path} ...")
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name_or_path,
-        trust_remote_code=True,
-    )
-    if "gemma-3" in model_name_or_path.lower():
-        from transformers import Gemma3ForCausalLM
-        model = Gemma3ForCausalLM.from_pretrained(
-            model_name_or_path,
-            # device_map="auto",
-            torch_dtype=torch.bfloat16,
-            # trust_remote_code=True,
-        ).cuda().eval()
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name_or_path,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
-        )
-    if tokenizer.pad_token_id is None:
-        if tokenizer.eos_token_id is not None:
-            tokenizer.pad_token_id = tokenizer.eos_token_id
+        # Build current prompt with previous attempts included
+        current_prompt = original_prompt
+        if iteration > 0:
+            last_attempt = prev_attempts.get(iteration - 1, "")
+            current_prompt += f"Possible reasoning path discovered by a student(May be correct or false):{last_attempt}\n"
+            print("=== Model response ===")
+            print("Augmented Prompt:")
+            print(current_prompt)
         else:
-            tokenizer.pad_token_id = 0
+            print("=== Model response ===")
+            print("Original Prompt:")
+            print(current_prompt)
 
-    model.eval()
+        # Generate and collect outputs
+        tokenizer, model = load_model_and_tokenizer(model_path)
+        model_outputs = generate_model_outputs(
+                model, 
+                tokenizer, 
+                current_prompt,
+            )
+        
+        output_text = model_outputs[0]["output"]
 
-    return model, tokenizer
+        del model, tokenizer
+        torch.cuda.empty_cache()
+        
+        print("=== Model response ===")
+        print(output_text)
+            
+        is_final_iteration = (iteration == MAX_ITERATIONS - 1)
 
-def evaluate_model_on_agieval(model, tokenizer, dataset,num_shots, generate_kwargs, record_wrong, f):
-    """
-    Evaluates the given model on the agieval dataset.
-    """
+        if not is_final_iteration:
+            prev_attempts[iteration] =  determine_reasoning_process_agieval(output=output_text, judge_model=judge_model,num=1)
+            judge_response = prev_attempts[iteration]
+        else:
+            prev_attempts[iteration] =  determine_reasoning_process_agieval(output=output_text, judge_model=judge_model,num=1)
+            judge_response = prev_attempts[iteration]
+            
 
-    # All the metrics used throughout the run.
-    cur_count = 0
-    correct_count = 0
-    trunc_wrong_count = 0
-    total_count = len(dataset)
-    wrong_responses = []
+        print("=== judge response ===")
+        print(judge_response[0].strip())
+
+        if is_final_iteration:
+            print("=== Final evaluation: ===")
+            final_judge_response = judge_response[0].strip()
+            break
+
+    print("=" * 80)
+    print("Process completed")
+    return final_judge_response
+
+
+def evaluate_model_on_agieval(dataset, progress, start_index, model_path):
+    """Performs the Generative Feedback Loop and proccesses through each question on the AGIEval dataset."""
+    cur_count = start_index
+    correct_count = progress["correct"]
+    total_count = progress["total"]
+    print(f"Preloaded {model_path} successfully.")
 
     for sample in tqdm(dataset):
-        question = sample['instruction']
-        true_answer = sample['output']
+        try:
+            print(f"Processing sample {cur_count} of {total_count}")
+            # Load the sample and true answer
+            question = sample['instruction']
+            true_answer = sample['output']
 
-        # Generate the model's response
-        prompt = format_prompt(question, num_shots)
+            # Step 1: Format the prompt with the AGieval question
+            original_prompt = format_prompt(question,0)
 
-        if re.search(r'gemma', model.config.name_or_path, re.IGNORECASE):
-            input_text = tokenizer(
-                prompt,
-                return_tensors="pt",
-                padding="longest",
-                pad_to_multiple_of=8,  # Key fix for Gemma
-            ).to(model.device)
-            input_ids = input_text["input_ids"]
-            attention_mask = input_text["attention_mask"]
-        else:
-            input_text = tokenizer(
-                prompt,
-                padding=False,
-                add_special_tokens=True,
-                return_tensors="pt",
-            )
-            input_ids = input_text.input_ids.cuda()
-            attention_mask = input_text.attention_mask.cuda()
+            # Step 2: Send to the model and determine its reasoning path.
+            final_response = get_reasoning_path(original_prompt, model_path)
 
-        output_ids = model.generate(
-            input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs
-        )
+            # Step 3: Extract the final answer from the model's response
+            final_answer = extract_answer_from_response(final_response)
 
-        response = []
-        for i in range(output_ids.shape[0]):
-            response.append(
-                tokenizer.decode(
-                    output_ids[i][input_ids.shape[1] :],
-                    skip_special_tokens=True,
-                    ignore_tokenization_space=True,
-                )
-            )
+            # Step 4: Check if the final answer is correct
+            correct = False
+            if check_label(final_answer, true_answer):
+                correct = True
+                correct_count += 1
+            cur_count += 1
 
-        if not len(response) > 1:
-            response = response[0]
-
-        # Extract the model's answer
-        model_answer = extract_answer_from_response(response)
-
-        # Compare the model's answer to the true answer
-        correct = False
-        if check_label(model_answer, true_answer):
-            correct = True
-            correct_count += 1
-        else:
-            if not model_answer: # wrong because the model didn't output a formatted answer, most likely to be truncated
-                trunc_wrong_count += 1
-
-            if record_wrong:
-                wrong_response = {
-                    "idx": str(cur_count),
-                    "question": question,
-                    "answer": sample["label"],
-                    "model_response": response,
-                    "gt_answer": str(true_answer),
-                    "model_answer": str(model_answer)
+            # Save intermediate results every 22 examples
+            if cur_count % 22 == 0:
+                interim_results = {
+                    "total": total_count,
+                    "correct": correct_count,
+                    "exception": total_count - cur_count,
+                    "accuracy": correct_count / cur_count if cur_count else 0,
                 }
-                wrong_responses.append(wrong_response)
+                with open(os.path.join(args.save_dir, 'scores.json'), 'w') as f:
+                    json.dump(interim_results, f, ensure_ascii=False, indent=2)
 
-        cur_count += 1
+            # Display the current progress to the user
+            summary_str = (
+                '=' * 50 + '\n\n' + \
+                '### Question:\n' + question + '\n\n' + \
+                f'### [MODEL_ANSWER]: {final_answer}\n' + \
+                f'### [TRUE_ANSWER]: {true_answer}\n\n' + \
+                f'%%%%% IS_CORRECT: {str(correct)} %%%%%\n\n' + \
+                f'%%%%% Acc for now: {correct_count}/{cur_count}={correct_count/cur_count} %%%%%\n\n'
+            )
+            print(summary_str)
+          
+        except Exception as e:
+            # If an exception occurs, we can skip this sample and continue with the next one.
+            print(f"Exception Occurs: {e}, we will skip sample {cur_count}")
+            continue
 
-        summary_str = (
-            '=' * 50 + '\n\n' + \
-            '### Question:\n' + question + '\n\n' + \
-            '### Model Response:\n' + response + '\n\n' + \
-            f'### [MODEL_ANSWER]: {model_answer}\n' + \
-            f'### [TRUE_ANSWER]: {true_answer}\n\n' + \
-            f'%%%%% IS_CORRECT: {str(correct)} %%%%%\n\n' + \
-            f'%%%%% Acc for now: {correct_count/cur_count} %%%%%\n\n'
-        )
-
-        print(summary_str)
-
-        f.write(summary_str)
-
-    accuracy = correct_count / total_count
-
-    # Needed to avoid divide by zero error.
-    if (total_count - correct_count) > 0:
-     trunc_wrong_ratio = trunc_wrong_count / (total_count - correct_count)
+    # After processing all samples, we can calculate the final accuracy
+    if cur_count == 0:
+        accuracy=0
     else:
-     trunc_wrong_ratio = 0.0
+     accuracy = correct_count / cur_count
 
     results = {
         "total": total_count,
         "correct": correct_count,
-        "trunc_wrong": trunc_wrong_count,
-        "trunc_wrong_ratio": trunc_wrong_ratio,
+        "exception": total_count - cur_count,
         "accuracy": accuracy,
-        "wrong_responses": wrong_responses
     }
-
     return results
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B')
     parser.add_argument("--run_all_models", action='store_true', help='run all models in the list')
     parser.add_argument("--max_new_tokens", type=int, default=2048)
     parser.add_argument('--num_shots', type=int, choices=[0, 3], default=0)
     parser.add_argument('--record_wrong', action='store_true', help='record the answers that are wrong')
     parser.add_argument('--data_root', default="/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/data")
     parser.add_argument('--output_dir', default='./output')
+    parser.add_argument('--save_dir', default='./proj_src/results')
+    
     args = parser.parse_args()
 
-
+    # Only do one model at a time, do not run all models or program may be unstable.  Keep this list length of 1.
     model_list = [
-          "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf/hub/models--google--gemma-3-4b-it/snapshots/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd",
-        # "stabilityai/stablelm-zephyr-3b",
-        # "HuggingFaceTB/SmolLM2-1.7B-Instruct",
-        # "meta-llama/Llama-3.2-1B-Instruct",
-        # "meta-llama/Llama-3.2-3B-Instruct",
-        # "Qwen/Qwen2.5-1.5B-Instruct",
-        # "Qwen/Qwen2.5-3B-Instruct",
-        # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-        # "mistralai/Mistral-7B-Instruct-v0.3",
-        # "Qwen/Qwen2.5-7B-Instruct",
-        # "meta-llama/Llama-3.1-8B-Instruct",
-        # "Qwen/Qwen2.5-Math-7B",
+   #"/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf/hub/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1", #"Qwen/Qwen2.5-3B-Instruct
+   "/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf/hub/models--meta-llama--Llama-3.2-3B-Instruct/snapshots/0cb88a4f764b7a12671c53f0838cd831a0843b95", #Llama-3.2-3B-Instruct
+   #"/scratch/eecs545w25_class_root/eecs545w25_class/cse545_reasoning/hf/hub/models--google--gemma-3-4b-it/snapshots/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd", #google/gemma-3-4b-it",
     ]   
 
     os.makedirs(args.output_dir, exist_ok=True)
-
-   # Set to variable
-    dataset = get_dataset(args)
-
-    # generate_kwargs = dict(max_new_tokens=args.max_new_tokens, top_p=0.95, temperature=0.8)
+    dataset = prepare_agi_eval_dataset(args=args)
+    print( f"In total, {len(dataset)} samples were detected in the dataset.")
     generate_kwargs = dict(max_new_tokens=args.max_new_tokens, do_sample=False) # for deterministic generation
 
     if args.run_all_models:
         for full_model_name in model_list:
             save_name = os.path.join(args.output_dir, full_model_name.split('/')[-1])
             os.makedirs(save_name, exist_ok=True)
-            model, tokenizer = load(full_model_name)
             print(f'Evaluating on {full_model_name}')
+            args.save_dir = save_name
+
+            progress = build_json(args,dataset)
+            print("Total:", progress["total"], "Correct", progress["correct"], "Exception", progress["exception"])
+
+            # Manually set where the index should begin at
+            # The total samples minus the number of samples we have left to evaluate.
+            start_index = progress["total"] - progress["exception"]
+            print(f"Start index: {start_index}")
+            dataset = dataset[start_index:]
+            print(f"Loaded dataset with {len(dataset)} samples.")
+            
 
             with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-                results = evaluate_model_on_agieval(model=model, tokenizer=tokenizer, dataset=dataset, num_shots=args.num_shots, generate_kwargs=generate_kwargs, record_wrong=args.record_wrong, f=f)
-            
-            wrong_responses = results["wrong_responses"]
-            del results["wrong_responses"]
-
+                results = evaluate_model_on_agieval(dataset=dataset, start_index=start_index, progress=progress, model_path=full_model_name)
             print(results)
             with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.json'), 'w') as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
 
-            if args.record_wrong:
-                with open(os.path.join(save_name, f'wrong_responses_{args.max_new_tokens}_{args.num_shots}shot.jsonl'), 'w') as f:
-                    for item in wrong_responses:
-                        f.write(json.dumps(item, ensure_ascii=False) + "\n")
-
-    else:
-        full_model_name = args.model_name
-        save_name = os.path.join(args.output_dir, full_model_name.split('/')[-1])
-        os.makedirs(save_name, exist_ok=True)
-        model, tokenizer = load(full_model_name)
-        print(f'Evaluating on {full_model_name}')
-
-        with open(os.path.join(save_name, f'responses_{args.max_new_tokens}_{args.num_shots}shot.txt'), 'w') as f:
-            results = evaluate_model_on_agieval(model=model, tokenizer=tokenizer, dataset=dataset, num_shots=args.num_shots, generate_kwargs=generate_kwargs, record_wrong=args.record_wrong, f=f)
-        
-        wrong_responses = results["wrong_responses"]
-        del results["wrong_responses"]
-
-        print(results)
-        with open(os.path.join(save_name, f'scores_{args.max_new_tokens}_{args.num_shots}shot.json'), 'w') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-
-        if args.record_wrong:
-            with open(os.path.join(save_name, f'wrong_responses_{args.max_new_tokens}_{args.num_shots}shot.jsonl'), 'w') as f:
-                for item in wrong_responses:
-                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
-
-        
 
 
